@@ -46,32 +46,28 @@ class _DynamicPlaylistScreenState extends State<DynamicPlaylistScreen> {
     super.dispose();
   }
 
-  // Automatisch alle .mp3 bestanden uit de assets/mijnliedjes/ map ophalen
-  Future<void> _loadSongsFromAssets() async {
-    try {
-      final manifestContent = await rootBundle.loadString('AssetManifest.json');
-      final Map<String, dynamic> manifestMap = json.decode(manifestContent);
+// Automatisch alle .mp3 bestanden uit de assets/mijnliedjes/ map ophalen
+Future<void> _loadSongsFromAssets() async {
+  try {
+    // Gebruik de moderne AssetManifest API in plaats van handmatig het json-bestand te lezen
+    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+    final assets = manifest.listAssets();
 
-      // Filter bestanden die in de map assets/mijnliedjes/ staan en eindigen op .mp3
-      final mp3Files = manifestMap.keys
-          .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
-          .toList();
+    final mp3Files = assets
+        .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
+        .toList();
 
-      setState(() {
-        _playlist = mp3Files;
-        _isLoading = false;
-      });
-
-      if (_playlist.isNotEmpty) {
-        debugPrint("Gevonden liedjes: $_playlist");
-      }
-    } catch (e) {
-      debugPrint("Fout bij laden van assets: $e");
-      setState(() {
-        _isLoading = false;
-      });
-    }
+    setState(() {
+      _playlist = mp3Files;
+      _isLoading = false;
+    });
+  } catch (e) {
+    debugPrint("Fout bij laden van assets: $e");
+    setState(() {
+      _isLoading = false;
+    });
   }
+}
 
   // Speel een specifiek nummer af op basis van de index
   Future<void> _playSong(int index) async {
