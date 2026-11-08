@@ -21,19 +21,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Strip all Code Signing and Provisioning Requirements
-        run: |
-          cd ios
-          # Verwijder alle Development Teams, Provisioning Profiles en dwing handmatige/lege signing af
-          find . -name "project.pbxproj" -exec sed -i '' '/DEVELOPMENT_TEAM/d' {} +
-          find . -name "project.pbxproj" -exec sed -i '' '/PROVISIONING_PROFILE/d' {} +
-          sed -i '' 's/CODE_SIGNING_STYLE = Automatic;/CODE_SIGNING_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_REQUIRED = YES;/CODE_SIGNING_REQUIRED = NO;/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_ALLOWED = YES;/CODE_SIGNING_ALLOWED = NO;/g' Runner.xcodeproj/project.pbxproj
-          cd ..
-
-      - name: Build iOS Release App (No codesign)
-        run: flutter build ios --release --no-codesign
+      - name: Build iOS App (Debug without codesign)
+        run: flutter build ios --debug --no-codesign
 
       - name: Package IPA
         run: |
