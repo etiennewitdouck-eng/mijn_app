@@ -1,43 +1,52 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'dart:convert';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/services.xml';
+import 'package:just_audio/just_audio.dart';
+import 'package:audio_service/audio_service.dart';
 
-void main() {
-  runApp(const DynamicPlaylistApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
 }
 
-class DynamicPlaylistApp extends StatelessWidget {
-  const DynamicPlaylistApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: const DynamicPlaylistScreen(),
+      title: 'Mijn MP3 Speler',
+      theme: ThemeData.dark(),
+      home: const MusicPlayerPage(),
     );
   }
 }
 
-class DynamicPlaylistScreen extends StatefulWidget {
-  const DynamicPlaylistScreen({super.key});
+class MusicPlayerPage extends StatefulWidget {
+  const MusicPlayerPage({super.key});
 
   @override
-  State<DynamicPlaylistScreen> createState() => _DynamicPlaylistScreenState();
+  State<MusicPlayerPage> createState() => _MusicPlayerPageState();
 }
 
-class _DynamicPlaylistScreenState extends State<DynamicPlaylistScreen> {
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  
+class _MusicPlayerPageState extends State<MusicPlayerPage> {
+  late final AudioPlayer _audioPlayer;
   List<String> _playlist = [];
+  List<String> _albumArts = [];
   bool _isLoading = true;
-  int _currentIndex = 0;
+  int? _currentIndex;
   bool _isPlaying = false;
 
   @override
   void initState() {
     super.initState();
+    _audioPlayer = AudioPlayer();
     _loadSongsFromAssets();
+
+    _audioPlayer.playerStateStream.listen((state) {
+      setState(() {
+        _isPlaying = state.playing;
+      });
+    });
   }
 
   @override
@@ -46,168 +55,95 @@ class _DynamicPlaylistScreenState extends State<DynamicPlaylistScreen> {
     super.dispose();
   }
 
-// Automatisch alle .mp3 bestanden uit de assets/mijnliedjes/ map ophalen
-Future<void> _loadSongsFromAssets() async {
-  try {
-    // Gebruik de moderne AssetManifest API in plaats van handmatig het json-bestand te lezen
-    final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    final assets = manifest.listAssets();
-
-    final mp3Files = assets
-        .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
-        .toList();
-
-    setState(() {
-      _playlist = mp3Files;
-      _isLoading = false;
-    });
-  } catch (e) {
-    debugPrint("Fout bij laden van assets: $e");
-    setState(() {
-      _isLoading = false;
-    });
-  }
-}
-
-  // Speel een specifiek nummer af op basis van de index
-  Future<void> _playSong(int index) async {
-    if (_playlist.isEmpty) return;
+  Future<void> _loadSongsFromAssets() async {
     try {
-      String fullPath = _playlist[index];
-      // Haal de bestandsnaam op (bijv. 'assets/mijnliedjes/liedje.mp3' -> 'mijnliedjes/liedje.mp3' voor AssetSource)
-      String relativePath = fullPath.replaceFirst('assets/', '');
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final assets = manifest.listAssets();
 
-      await _audioPlayer.stop();
-      await _audioPlayer.play(AssetSource(relativePath));
+      // Filter alle MP3's
+      final mp3Files = assets
+          .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
+          .toList();
+
+      setState(() {
+        _playlist = mp3Files;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Fout bij laden van assets: $e");
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _playSong(int index) async {
+    try {
+      final songPath = _playlist[index];
       
+      // Bepaal de bestandsnaam zonder extensie (bijv. "liedje1" uit "assets/mijnliedjes/liedje1.mp3")
+      final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+      final imagePath = 'assets/mijnliedjes/$baseName.jpg';
+
+      // Laad en speel het liedje af met metadata voor CarPlay
+      // We gebruiken AudioSource.asset i.c.m. tag voor de weergave
+      await _audioPlayer.setAudioSource(
+        AudioSource.asset(
+          songPath,
+          tag: MediaItem(
+            id: songPath,
+            album: 'Mijn MP3 Map',
+            title: baseName,
+            artist: 'Onbekende Artiest',
+            // Hier koppelen we de afbeelding voor CarPlay / het scherm
+            artUri: Uri.parse('asset:///$imagePath'),
+          ),
+        ),
+      );
+
+      await _audioPlayer.play();
       setState(() {
         _currentIndex = index;
-        _isPlaying = true;
       });
     } catch (e) {
       debugPrint("Fout bij afspelen: $e");
     }
   }
 
-  // Pauzeer of hervat
-  Future<void> _togglePlayPause() async {
-    if (_isPlaying) {
-      await _audioPlayer.pause();
-      setState(() => _isPlaying = false);
-    } else {
-      if (_audioPlayer.state == PlayerState.paused) {
-        await _audioPlayer.resume();
-        setState(() => _isPlaying = true);
-      } else {
-        if (_playlist.isNotEmpty) {
-          await _playSong(_currentIndex);
-        }
-      }
-    }
-  }
-
-  // Volgend liedje
-  void _nextSong() {
-    if (_playlist.isEmpty) return;
-    int nextIndex = (_currentIndex + 1) % _playlist.length;
-    _playSong(nextIndex);
-  }
-
-  // Vorig liedje
-  void _prevSong() {
-    if (_playlist.isEmpty) return;
-    int prevIndex = (_currentIndex - 1 < 0) ? _playlist.length - 1 : _currentIndex - 1;
-    _playSong(prevIndex);
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Schone weergave van de songtitel (zonder pad en .mp3 extensie)
-    String currentDisplayName = _playlist.isNotEmpty 
-        ? _playlist[_currentIndex].split('/').last.replaceAll('.mp3', '') 
-        : "Geen muziek gevonden";
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Mijn MP3 Afspeellijst')),
+      appBar: AppBar(
+        title: const Text('Mijn MP3 Auto Speler'),
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _playlist.isEmpty
-              ? const Center(child: Text("Geen MP3-bestanden gevonden in assets/mijnliedjes/!"))
-              : Column(
-                  children: [
-                    // Bovenkant: Huidig nummer info
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      color: Colors.blue.shade50,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.music_note, size: 40, color: Colors.blue),
-                          const SizedBox(width: 15),
-                          Expanded(
-                            child: Text(
-                              currentDisplayName,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    // Midden: Afspeelbediening knoppen
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.skip_previous, size: 40),
-                            onPressed: _prevSong,
-                          ),
-                          const SizedBox(width: 20),
-                          IconButton(
-                            icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled, size: 64),
-                            color: Colors.blue,
-                            onPressed: _togglePlayPause,
-                          ),
-                          const SizedBox(width: 20),
-                          IconButton(
-                            icon: const Icon(Icons.skip_next, size: 40),
-                            onPressed: _nextSong,
-                          ),
-                        ],
-                      ),
-                    ),
-                    
-                    const Divider(),
+              ? const Center(child: Text('Geen liedjes gevonden in assets/mijnliedjes/'))
+              : ListView.builder(
+                  itemCount: _playlist.length,
+                  itemBuilder: (context, index) {
+                    final fileName = _playlist[index].split('/').last;
+                    final isSelected = _currentIndex == index;
 
-                    // Onderkant: Automatisch gegenereerde afspeellijst uit de map
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: _playlist.length,
-                        itemBuilder: (context, index) {
-                          bool isSelected = index == _currentIndex;
-                          String songTitle = _playlist[index].split('/').last.replaceAll('.mp3', '');
-                          
-                          return ListTile(
-                            leading: Icon(
-                              isSelected ? Icons.play_arrow : Icons.audiotrack,
-                              color: isSelected ? Colors.blue : Colors.grey,
-                            ),
-                            title: Text(
-                              songTitle,
-                              style: TextStyle(
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                color: isSelected ? Colors.blue : Colors.black,
-                              ),
-                            ),
-                            onTap: () => _playSong(index),
-                          );
-                        },
+                    return ListTile(
+                      leading: Icon(
+                        isSelected && _isPlaying ? Icons.pause_circle : Icons.music_note,
+                        color: isSelected ? Colors.green : Colors.white,
                       ),
-                    ),
-                  ],
+                      title: Text(
+                        fileName,
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          color: isSelected ? Colors.green : Colors.white,
+                        ),
+                      ),
+                      trailing: isSelected && _isPlaying
+                          ? const Icon(Icons.volume_up, color: Colors.green)
+                          : null,
+                      onTap: () => _playSong(index),
+                    );
+                  },
                 ),
     );
   }
