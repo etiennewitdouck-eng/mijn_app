@@ -21,8 +21,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Disable Xcode Code Signing
+        run: |
+          cd ios
+          # Schakel code-signering uit in het Xcode projectbestand
+          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES;/CODE_SIGNING_ALLOWED = NO;/g' Runner.xcodeproj/project.pbxproj
+          cd ..
+
       - name: Build iOS Release App (No codesign)
-        run: CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_REQUIRED=NO flutter build ios --release --no-codesign
+        run: flutter build ios --release --no-codesign
 
       - name: Package IPA
         run: |
