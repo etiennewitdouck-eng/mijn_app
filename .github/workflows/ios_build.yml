@@ -21,13 +21,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS App
+      - name: Build iOS App (Release without codesign)
         run: flutter build ios --release --no-codesign
 
       - name: Package IPA
         run: |
           mkdir -p Payload
-          mv build/ios/iphoneos/Runner.app Payload/
+          # Verplaats de Runner.app vanuit de release map naar Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
           zip -r Payload.ipa Payload
 
       - name: Upload IPA Artifact
