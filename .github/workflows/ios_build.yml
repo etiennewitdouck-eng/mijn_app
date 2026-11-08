@@ -22,7 +22,7 @@ jobs:
         run: flutter pub get
 
       - name: Build iOS Release App (No codesign)
-        run: flutter build ios --release --no-codesign -- --apple-certificate="" CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER=""
+        run: flutter build ios --release --no-codesign --xcode-options="CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY='' CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER=''"
 
       - name: Package IPA
         run: |
