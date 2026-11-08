@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -21,17 +21,17 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS Simulator App
-        run: flutter build ios --simulator
+      - name: Build iOS Release App (No codesign)
+        run: flutter build ios --release --no-codesign
 
       - name: Package IPA
         run: |
           mkdir -p Payload
-          cp -R build/ios/iphonesimulator/Runner.app Payload/
+          cp -R build/ios/iphoneos/Runner.app Payload/
           zip -r Payload.ipa Payload
 
       - name: Upload IPA Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ios-app-build
           path: Payload.ipa
