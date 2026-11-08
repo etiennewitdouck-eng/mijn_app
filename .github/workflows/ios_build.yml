@@ -21,10 +21,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Patch Xcode project to bypass signing
+      - name: Force Disable Code Signing in Xcode Project
         run: |
           cd ios
-          # Verwijder de eis voor een Development Team uit het Xcode projectbestand
+          # Zet code signing stijl op handmatig en schakel het volledig uit
+          sed -i '' 's/CODE_SIGNING_STYLE = Automatic;/CODE_SIGNING_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_REQUIRED = YES;/CODE_SIGNING_REQUIRED = NO;/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES;/CODE_SIGNING_ALLOWED = NO;/g' Runner.xcodeproj/project.pbxproj
+          # Verwijder eventuele resterende Development Team verwijzingen
           find . -name "project.pbxproj" -exec sed -i '' '/DEVELOPMENT_TEAM/d' {} +
           cd ..
 
@@ -42,5 +46,4 @@ jobs:
         with:
           name: ios-app-build
           path: Payload.ipa
-
           
