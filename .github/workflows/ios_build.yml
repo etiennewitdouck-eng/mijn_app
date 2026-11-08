@@ -21,6 +21,20 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Thoroughly Disable Code Signing Across Project
+        run: |
+          cd ios
+          # Schakel code signing uit voor alle targets en configuraties in het projectbestand
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES;/CODE_SIGNING_ALLOWED = NO;/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_REQUIRED = YES;/CODE_SIGNING_REQUIRED = NO;/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_IDENTITY = "iPhone Developer";/CODE_SIGNING_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_STYLE = Automatic;/CODE_SIGNING_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
+          
+          # Verwijder alle verwijzingen naar development teams en provisioning profiles
+          find . -name "project.pbxproj" -exec sed -i '' '/DEVELOPMENT_TEAM/d' {} +
+          find . -name "project.pbxproj" -exec sed -i '' '/PROVISIONING_PROFILE/d' {} +
+          cd ..
+
       - name: Build iOS App (Debug without codesign)
         run: flutter build ios --debug --no-codesign
 
