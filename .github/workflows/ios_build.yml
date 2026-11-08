@@ -21,27 +21,16 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Thoroughly Disable Code Signing Across Project
+      - name: Build iOS App without Xcode Archive restrictions
         run: |
-          cd ios
-          # Schakel code signing uit voor alle targets en configuraties in het projectbestand
-          sed -i '' 's/CODE_SIGNING_ALLOWED = YES;/CODE_SIGNING_ALLOWED = NO;/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_REQUIRED = YES;/CODE_SIGNING_REQUIRED = NO;/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_IDENTITY = "iPhone Developer";/CODE_SIGNING_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_STYLE = Automatic;/CODE_SIGNING_STYLE = Manual;/g' Runner.xcodeproj/project.pbxproj
-          
-          # Verwijder alle verwijzingen naar development teams en provisioning profiles
-          find . -name "project.pbxproj" -exec sed -i '' '/DEVELOPMENT_TEAM/d' {} +
-          find . -name "project.pbxproj" -exec sed -i '' '/PROVISIONING_PROFILE/d' {} +
-          cd ..
+          # Compileert de app voor iOS-device zonder codesign en dwingt xcodebuild in te binden als losse app
+          flutter build ios --release --no-codesign --no-pub
 
-      - name: Build iOS App (Debug without codesign)
-        run: flutter build ios --debug --no-codesign
-
-      - name: Package IPA
+      - name: Package IPA correctly
         run: |
           mkdir -p Payload
-          cp -R build/ios/iphoneos/Runner.app Payload/
+          # Zoek de gebouwde app en kopieer deze naar de Payload map
+          find build/ios/iphoneos -name "*.app" -maxdepth 2 -exec cp -R {} Payload/ \;
           zip -r Payload.ipa Payload
 
       - name: Upload IPA Artifact
