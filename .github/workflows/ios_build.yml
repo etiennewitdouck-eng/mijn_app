@@ -1,4 +1,3 @@
-#Update iOS workflow voor code signing bypass
 name: Build iOS IPA
 
 on:
@@ -23,7 +22,7 @@ jobs:
         run: flutter pub get
 
       - name: Build iOS Release App (No codesign)
-        run: flutter build ios --release --no-codesign -- --codesign-identity "" CODE_SIGN_IDENTITY="" CODE_SIGN_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+        run: CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGN_REQUIRED=NO flutter build ios --release --no-codesign
 
       - name: Package IPA
         run: |
@@ -36,3 +35,4 @@ jobs:
         with:
           name: ios-app-build
           path: Payload.ipa
+          
