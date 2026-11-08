@@ -55,7 +55,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     super.dispose();
   }
 
-  Future<void> _loadSongsFromAssets() async {
+  
+Future<void> _loadSongsFromAssets() async {
     try {
       final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
       final assets = manifest.listAssets();
@@ -64,6 +65,23 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       final mp3Files = assets
           .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
           .toList();
+
+      final tempDir = await getTemporaryDirectory();
+      for (var songPath in mp3Files) {
+        final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+        final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
+
+        try {
+          final byteData = await rootBundle.load(imageAssetPath);
+          final file = File('${tempDir.path}/$baseName.jpg');
+          await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+          
+          _localImagePaths[songPath] = file.path;
+          debugPrint("SUCCES: Afbeelding gekopieerd voor $baseName -> ${file.path}");
+        } catch (e) {
+          debugPrint("FOUT: Kon afbeelding niet vinden voor $imageAssetPath ($e)");
+        }
+      }
 
       setState(() {
         _playlist = mp3Files;
@@ -76,7 +94,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       });
     }
   }
-
+  
   Future<void> _playSong(int index) async {
     try {
       final songPath = _playlist[index];
