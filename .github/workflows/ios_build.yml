@@ -22,12 +22,11 @@ jobs:
         run: flutter pub get
 
       - name: Build iOS Simulator App
-        run: flutter build ios --simulator --release
+        run: flutter build ios --simulator
 
       - name: Package IPA
         run: |
           mkdir -p Payload
-          # Pak de app uit de simulator-map in plaats van iphoneos
           cp -R build/ios/iphonesimulator/Runner.app Payload/
           zip -r Payload.ipa Payload
 
