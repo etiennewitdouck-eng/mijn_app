@@ -21,8 +21,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Patch Xcode project to bypass signing
+        run: |
+          cd ios
+          # Verwijder de eis voor een Development Team uit het Xcode projectbestand
+          find . -name "project.pbxproj" -exec sed -i '' '/DEVELOPMENT_TEAM/d' {} +
+          cd ..
+
       - name: Build iOS Release App (No codesign)
-        run: flutter build ios --release --no-codesign --xcode-options="CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY='' CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER=''"
+        run: flutter build ios --release --no-codesign
 
       - name: Package IPA
         run: |
@@ -35,4 +42,3 @@ jobs:
         with:
           name: ios-app-build
           path: Payload.ipa
-          
