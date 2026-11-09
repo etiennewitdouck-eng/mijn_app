@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:math'; // Nodig voor de shuffle functie
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
@@ -28,7 +28,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   List<SongItem> playlist = [];
   int currentIndex = 0;
   bool isShuffled = false;
-  List<SongItem> _unshuffledPlaylist = []; // Om de originele volgorde te onthouden
+  List<SongItem> _unshuffledPlaylist = [];
 
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
@@ -111,26 +111,21 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     await _player.play();
   }
 
-  // Shuffle aan- of uitzetten
   Future<void> toggleShuffle() async {
     isShuffled = !isShuffled;
     
     if (isShuffled) {
-      // Bewaar huidige song die speelt
       final currentSong = playlist.isNotEmpty && currentIndex < playlist.length ? playlist[currentIndex] : null;
-      
-      // Shuffle de lijst behalve misschien de huidige song
       List<SongItem> shuffled = List.from(playlist);
       shuffled.shuffle(Random());
       
       if (currentSong != null) {
         shuffled.remove(currentSong);
-        shuffled.insert(0, currentSong); // Zet huidige nummer vooraan
+        shuffled.insert(0, currentSong);
       }
       
       await setPlaylist(shuffled, 0, keepOriginalOrder: true);
     } else {
-      // Terug naar de normale artiest-volgorde
       final currentSong = playlist.isNotEmpty && currentIndex < playlist.length ? playlist[currentIndex] : null;
       int newIndex = 0;
       if (currentSong != null) {
@@ -293,7 +288,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         debugPrint("Fout bij scannen Documenten-map: $e");
       }
 
-      // **Sorteren op Artiest (alfabetisch) en daarna op Titel**
       loadedSongs.sort((a, b) {
         int artistComp = a.artist.toLowerCase().compareTo(b.artist.toLowerCase());
         if (artistComp != 0) return artistComp;
@@ -341,7 +335,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       appBar: AppBar(
         title: const Text('Mijn MP3 Auto Speler'),
         actions: [
-          // Shuffle Knop in de AppBar
           IconButton(
             icon: Icon(
               Icons.shuffle,
@@ -418,7 +411,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         width: 50,
                         height: 50,
                         color: Colors.grey[800],
-                        child: const Icon(Icons.music_note, color: TextOverflow == TextOverflow.ellipsis ? Colors.white : Colors.white),
+                        child: const Icon(Icons.music_note, color: Colors.white),
                       ),
                     const SizedBox(width: 10),
                     
@@ -626,7 +619,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             
             const Spacer(),
             Row(
-              mainAxisAlignment: MainizedBox == MainAxisAlignment.center ? MainAxisAlignment.center : MainAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
