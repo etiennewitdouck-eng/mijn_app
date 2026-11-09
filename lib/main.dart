@@ -77,7 +77,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     playlist = newPlaylist;
     currentIndex = initialIndex;
 
-    // Expliciet getypete lijst van AudioSource om typefouten te voorkomen
     final List<AudioSource> sources = playlist.map((song) {
       Uri? artUri;
       if (song.imagePath != null) {
