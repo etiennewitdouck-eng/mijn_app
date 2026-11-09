@@ -1,13 +1,76 @@
-import 'dart:io'; // Nodig voor de 'File' klasse
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:path_provider/path_provider.dart'; // Nodig voor getApplicationDocumentsDirectory()
+import 'package:path_provider/path_provider.dart';
+
+// Globale AudioHandler zodat de app en CarPlay ermee kunnen communiceren
+late AudioHandler audioHandler;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialiseer AudioService zodat CarPlay en Lock Screen de metadata oppikken
+  audioHandler = await AudioService.init(
+    builder: () => MyAudioHandler(),
+    config: const AudioServiceConfig(
+      androidNotificationChannelId: 'com.mijnapp.mp3.channel.audio',
+      androidNotificationChannelName: 'Mijn MP3 Speler',
+      androidNotificationOngoing: true,
+    ),
+  );
+
   runApp(const MyApp());
+}
+
+/// Specifieke AudioHandler om liedjes en metadata (zoals artUri) door te sturen naar iOS/CarPlay
+class MyAudioHandler extends BaseAudioHandler with SeekHandler {
+  final AudioPlayer _player = AudioPlayer();
+
+  MyAudioHandler() {
+    // Koppel de spelerstatus aan audio_service
+    _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
+  }
+
+  PlaybackState _transformEvent(PlaybackEvent event) {
+    return PlaybackState(
+      controls: [
+        MediaControl.skipToPrevious,
+        if (_player.playing) MediaControl.pause else MediaControl.play,
+        MediaControl.skipToNext,
+      ],
+      systemActions: const {
+        MediaAction.seek,
+      },
+      processingState: const {
+        ProcessingState.idle: AudioProcessingState.idle,
+        ProcessingState.loading: AudioProcessingState.loading,
+        ProcessingState.buffering: AudioProcessingState.buffering,
+        ProcessingState.ready: AudioProcessingState.ready,
+        ProcessingState.completed: AudioProcessingState.completed,
+      }[_player.processingState]!,
+      playing: _player.playing,
+      updatePosition: _player.position,
+      bufferedPosition: _player.bufferedPosition,
+      speed: _player.speed,
+    );
+  }
+
+  @override
+  Future<void> play() => _player.play();
+
+  @override
+  Future<void> pause() => _player.pause();
+
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
+
+  // Methode om audio én de MediaItem (met artUri voor CarPlay) in te stellen
+  Future<void> loadSongWithMediaItem(AudioSource source, MediaItem item) async {
+    mediaItem.add(item); // Dit stuurt de metadata en poster naar CarPlay / iOS!
+    await _player.setAudioSource(source);
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -31,12 +94,8 @@ class MusicPlayerPage extends StatefulWidget {
 }
 
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
-  late final AudioPlayer _audioPlayer;
   List<String> _playlist = [];
-  
-  // Opslagplaats voor de gekopieerde lokale afbeeldingspaden (voor CarPlay/posters)
   final Map<String, String> _localImagePaths = {};
-  
   bool _isLoading = true;
   int? _currentIndex;
   bool _isPlaying = false;
@@ -44,20 +103,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   @override
   void initState() {
     super.initState();
-    _audioPlayer = AudioPlayer();
     _loadSongsFromAssets();
 
-    _audioPlayer.playerStateStream.listen((state) {
+    // Luister naar speelstatus om de UI te updaten
+    audioHandler.playbackState.listen((state) {
       setState(() {
         _isPlaying = state.playing;
       });
     });
-  }
-
-  @override
-  void dispose() {
-    _audioPlayer.dispose();
-    super.dispose();
   }
 
   Future<void> _loadSongsFromAssets() async {
@@ -65,12 +118,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
       final assets = manifest.listAssets();
 
-      // Filter alle MP3's uit assets/mijnliedjes/
       final mp3Files = assets
           .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
           .toList();
 
-      // Opslaan in de Documenten-map zodat CarPlay en het systeem erbij kunnen
       final appDocDir = await getApplicationDocumentsDirectory();
       
       for (var songPath in mp3Files) {
@@ -83,9 +134,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
           
           _localImagePaths[songPath] = file.path;
-          debugPrint("SUCCES: Afbeelding opgeslagen voor $baseName -> ${file.path}");
         } catch (e) {
-          debugPrint("FOUT: Kon afbeelding niet vinden voor $imageAssetPath ($e)");
+          debugPrint("Geen afbeelding gevonden voor $baseName ($e)");
         }
       }
 
@@ -106,57 +156,36 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       final songPath = _playlist[index];
       final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
       
-      // Haal het lokale pad op uit onze opgeslagen lijst
       final localImagePath = _localImagePaths[songPath];
       
-      // VEILIGHEIDSCHECK OP SCHERM: Dit toont direct een melding op je iPhone
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Afspelen: $baseName | Afbeelding bekend: ${localImagePath != null}'),
-            duration: const Duration(seconds: 4),
-            backgroundColor: Colors.blueGrey,
-          ),
-        );
-      }
-
       Uri? artUri;
       if (localImagePath != null) {
         final imageFile = File(localImagePath);
         if (await imageFile.exists()) {
           artUri = Uri.parse('file://$localImagePath');
-          debugPrint("KARAKTER CHECK: Gelukt om file uri te maken: $artUri");
         }
       }
 
-      // Laad het liedje met de metadata
-      await _audioPlayer.setAudioSource(
-        AudioSource.asset(
-          songPath,
-          tag: MediaItem(
-            id: songPath,
-            album: 'Mijn MP3 Map',
-            title: baseName,
-            artist: 'Onbekende Artiest',
-            artUri: artUri,
-          ),
+      // Geef de audiobron en de MediaItem mee aan onze AudioHandler
+      await (audioHandler as MyAudioHandler).loadSongWithMediaItem(
+        AudioSource.asset(songPath),
+        MediaItem(
+          id: songPath,
+          album: 'Mijn MP3 Map',
+          title: baseName,
+          artist: 'Onbekende Artiest',
+          artUri: artUri, // Dit stuurt de poster naar CarPlay!
         ),
       );
 
-      await _audioPlayer.play();
+      await audioHandler.play();
       setState(() {
         _currentIndex = index;
       });
     } catch (e) {
       debugPrint("Fout bij afspelen: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fout bij afspelen: $e'), backgroundColor: Colors.red),
-        );
-      }
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
