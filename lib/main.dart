@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math'; // Nodig voor de shuffle functie
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
@@ -26,6 +27,8 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   List<SongItem> playlist = [];
   int currentIndex = 0;
+  bool isShuffled = false;
+  List<SongItem> _unshuffledPlaylist = []; // Om de originele volgorde te onthouden
 
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
@@ -76,8 +79,11 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
-  Future<void> setPlaylist(List<SongItem> newPlaylist, int initialIndex) async {
+  Future<void> setPlaylist(List<SongItem> newPlaylist, int initialIndex, {bool keepOriginalOrder = false}) async {
     playlist = newPlaylist;
+    if (!keepOriginalOrder) {
+      _unshuffledPlaylist = List.from(newPlaylist);
+    }
     currentIndex = initialIndex;
 
     final List<AudioSource> sources = playlist.map((song) {
@@ -103,6 +109,36 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     await _player.setAudioSource(ConcatenatingAudioSource(children: sources), initialIndex: currentIndex);
     _updateMediaItemForCurrentIndex();
     await _player.play();
+  }
+
+  // Shuffle aan- of uitzetten
+  Future<void> toggleShuffle() async {
+    isShuffled = !isShuffled;
+    
+    if (isShuffled) {
+      // Bewaar huidige song die speelt
+      final currentSong = playlist.isNotEmpty && currentIndex < playlist.length ? playlist[currentIndex] : null;
+      
+      // Shuffle de lijst behalve misschien de huidige song
+      List<SongItem> shuffled = List.from(playlist);
+      shuffled.shuffle(Random());
+      
+      if (currentSong != null) {
+        shuffled.remove(currentSong);
+        shuffled.insert(0, currentSong); // Zet huidige nummer vooraan
+      }
+      
+      await setPlaylist(shuffled, 0, keepOriginalOrder: true);
+    } else {
+      // Terug naar de normale artiest-volgorde
+      final currentSong = playlist.isNotEmpty && currentIndex < playlist.length ? playlist[currentIndex] : null;
+      int newIndex = 0;
+      if (currentSong != null) {
+        newIndex = _unshuffledPlaylist.indexWhere((s) => s.path == currentSong.path);
+        if (newIndex == -1) newIndex = 0;
+      }
+      await setPlaylist(_unshuffledPlaylist, newIndex, keepOriginalOrder: true);
+    }
   }
 
   void _updateMediaItemForCurrentIndex() {
@@ -188,6 +224,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   bool _isLoading = true;
   int? _currentIndex;
   bool _isPlaying = false;
+  bool _isShuffled = false;
   MediaItem? _currentMediaItem;
 
   @override
@@ -256,8 +293,16 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         debugPrint("Fout bij scannen Documenten-map: $e");
       }
 
+      // **Sorteren op Artiest (alfabetisch) en daarna op Titel**
+      loadedSongs.sort((a, b) {
+        int artistComp = a.artist.toLowerCase().compareTo(b.artist.toLowerCase());
+        if (artistComp != 0) return artistComp;
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
+
       setState(() {
         _playlist = loadedSongs;
+        audioHandler._unshuffledPlaylist = List.from(loadedSongs);
         _isLoading = false;
       });
     } catch (e) {
@@ -266,6 +311,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         _isLoading = false;
       });
     }
+  }
+
+  void _toggleShuffle() async {
+    await audioHandler.toggleShuffle();
+    setState(() {
+      _isShuffled = audioHandler.isShuffled;
+      _playlist = audioHandler.playlist;
+    });
   }
 
   void _openNowPlayingScreen() {
@@ -288,6 +341,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       appBar: AppBar(
         title: const Text('Mijn MP3 Auto Speler'),
         actions: [
+          // Shuffle Knop in de AppBar
+          IconButton(
+            icon: Icon(
+              Icons.shuffle,
+              color: _isShuffled ? Colors.green : Colors.white,
+            ),
+            onPressed: _toggleShuffle,
+            tooltip: _isShuffled ? 'Shuffle aan' : 'Shuffle uit',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadSongs,
@@ -356,7 +418,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         width: 50,
                         height: 50,
                         color: Colors.grey[800],
-                        child: const Icon(Icons.music_note, color: Colors.white),
+                        child: const Icon(Icons.music_note, color: TextOverflow == TextOverflow.ellipsis ? Colors.white : Colors.white),
                       ),
                     const SizedBox(width: 10),
                     
@@ -564,6 +626,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             
             const Spacer(),
             Row(
+              mainAxisAlignment: MainizedBox == MainAxisAlignment.center ? MainAxisAlignment.center : MainAxisAlignment.center,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
