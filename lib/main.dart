@@ -166,6 +166,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         }
       }
 
+      // Visuele melding op je iPhone-scherm zodat je direct ziet wat er gebeurt
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Speelt: $baseName | Poster Uri: ${artUri != null ? "Gekoppeld" : "Ontbreekt"}'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: artUri != null ? Colors.green[800] : Colors.red[800],
+          ),
+        );
+      }
+
       // Geef de audiobron en de MediaItem mee aan onze AudioHandler
       await (audioHandler as MyAudioHandler).loadSongWithMediaItem(
         AudioSource.asset(songPath),
@@ -174,7 +185,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           album: 'Mijn MP3 Map',
           title: baseName,
           artist: 'Onbekende Artiest',
-          artUri: artUri, // Dit stuurt de poster naar CarPlay!
+          artUri: artUri,
         ),
       );
 
@@ -184,6 +195,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       });
     } catch (e) {
       debugPrint("Fout bij afspelen: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fout bij afspelen: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
