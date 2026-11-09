@@ -38,7 +38,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
-  // Streams voor de voortgangsbalk
   Stream<Duration> get positionStream => _player.positionStream;
   Stream<Duration?> get durationStream => _player.durationStream;
 
@@ -94,7 +93,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
         id: song.path,
         album: 'Mijn MP3 Map',
         title: song.title,
-        artist: 'Onbekende Artiest',
+        artist: song.artist,
         artUri: artUri,
       );
 
@@ -127,7 +126,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
         id: song.path,
         album: 'Mijn MP3 Map',
         title: song.title,
-        artist: 'Onbekende Artiest',
+        artist: song.artist,
         artUri: artUri,
       ),
     );
@@ -157,10 +156,17 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
 class SongItem {
   final String path;
   final String title;
+  final String artist;
   final String? imagePath;
   final bool isAsset;
 
-  SongItem({required this.path, required this.title, this.imagePath, required this.isAsset});
+  SongItem({
+    required this.path,
+    required this.title,
+    required this.artist,
+    this.imagePath,
+    required this.isAsset,
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -211,6 +217,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     });
   }
 
+  // Hulpmethode om artiest en titel te splitsen op basis van de bestandsnaam (bijv. "Beatles-Let-It-Be.mp3")
+  (String artist, String title) _parseSongName(String fileNameWithoutExt) {
+    String artist = 'Onbekende Artiest';
+    String title = fileNameWithoutExt;
+
+    final dashIndex = fileNameWithoutExt.indexOf('-');
+    if (dashIndex != -1) {
+      artist = fileNameWithoutExt.substring(0, dashIndex).trim();
+      title = fileNameWithoutExt.substring(dashIndex + 1).trim().replaceAll('-', ' ');
+    }
+    return (artist, title);
+  }
+
   Future<void> _loadSongs() async {
     try {
       List<SongItem> loadedSongs = [];
@@ -226,6 +245,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
         for (var songPath in assetMp3s) {
           final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+          final (artist, title) = _parseSongName(baseName);
           final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
 
           String? localImgPath;
@@ -238,7 +258,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
           loadedSongs.add(SongItem(
             path: songPath,
-            title: baseName,
+            title: title,
+            artist: artist,
             imagePath: localImgPath,
             isAsset: true,
           ));
@@ -255,13 +276,16 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             final fileNameWithExt = entity.path.split('/').last;
             final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
             
+            final (artist, title) = _parseSongName(baseName);
+
             final potentialImage = File('${appDocDir.path}/$baseName.jpg');
             String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
-            if (!loadedSongs.any((s) => s.title.toLowerCase() == baseName.toLowerCase())) {
+            if (!loadedSongs.any((s) => s.title.toLowerCase() == title.toLowerCase())) {
               loadedSongs.add(SongItem(
                 path: entity.path,
-                title: baseName,
+                title: title,
+                artist: artist,
                 imagePath: imgPath,
                 isAsset: false,
               ));
@@ -353,13 +377,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
-                    const Text(
-                      'Onbekende Artiest',
-                      style: TextStyle(fontSize: 15, color: Colors.grey),
+                    Text(
+                      _currentMediaItem?.artist ?? 'Onbekende Artiest',
+                      style: const TextStyle(fontSize: 15, color: Colors.grey),
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 16),
                     
-                    // VOORTGANGSBALK & DOORSPOELEN (SLIDER)
                     StreamBuilder<Duration>(
                       stream: audioHandler.positionStream,
                       builder: (context, snapshotPosition) {
@@ -489,6 +513,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           color: isSelected ? Colors.green : Colors.white,
                         ),
                       ),
+                      subtitle: Text(
+                        song.artist,
+                        style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      ),
                       trailing: isSelected && _isPlaying
                           ? const Icon(Icons.volume_up, color: Colors.green)
                           : null,
@@ -527,11 +555,23 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     const SizedBox(width: 10),
                     
                     Expanded(
-                      child: Text(
-                        _currentMediaItem?.title ?? '',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _currentMediaItem?.title ?? '',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            _currentMediaItem?.artist ?? '',
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
 
