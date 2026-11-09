@@ -104,15 +104,32 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   Future<void> _playSong(int index) async {
     try {
       final songPath = _playlist[index];
-      
-      // Bepaal de bestandsnaam zonder extensie
       final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
       
-      // Haal het lokale bestandspad van de afbeelding op voor de poster/albumhoes
+      // Haal het lokale pad op uit onze opgeslagen lijst
       final localImagePath = _localImagePaths[songPath];
-      final artUri = localImagePath != null ? Uri.file(localImagePath) : null;
+      
+      // VEILIGHEIDSCHECK OP SCHERM: Dit toont direct een melding op je iPhone
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Afspelen: $baseName | Afbeelding bekend: ${localImagePath != null}'),
+            duration: const Duration(seconds: 4),
+            backgroundColor: Colors.blueGrey,
+          ),
+        );
+      }
 
-      // Laad en speel het liedje af met metadata voor CarPlay
+      Uri? artUri;
+      if (localImagePath != null) {
+        final imageFile = File(localImagePath);
+        if (await imageFile.exists()) {
+          artUri = imageFile.uri; // Dit is de meest betrouwbare manier voor iOS en CarPlay
+          debugPrint("KARAKTER CHECK: Gelukt om file uri te maken: $artUri");
+        }
+      }
+
+      // Laad het liedje met de metadata
       await _audioPlayer.setAudioSource(
         AudioSource.asset(
           songPath,
@@ -132,8 +149,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       });
     } catch (e) {
       debugPrint("Fout bij afspelen: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fout bij afspelen: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
+  
 
   @override
   Widget build(BuildContext context) {
