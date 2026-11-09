@@ -5,8 +5,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
 
-// Globale AudioHandler zodat de app en CarPlay ermee kunnen communiceren
-late AudioHandler audioHandler;
+late MyAudioHandler audioHandler;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,9 +24,19 @@ void main() async {
 
 class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player = AudioPlayer();
+  List<String> playlist = [];
+  Map<String, String> localImagePaths = {};
+  int currentIndex = 0;
 
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
+    
+    // Automatisch naar het volgende liedje gaan als de huidige afgelopen is
+    _player.processingStateStream.listen((state) {
+      if (state == ProcessingState.completed) {
+        skipToNext();
+      }
+    });
   }
 
   PlaybackState _transformEvent(PlaybackEvent event) {
@@ -39,6 +48,8 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
       ],
       systemActions: const {
         MediaAction.seek,
+        MediaAction.skipToNext,
+        MediaAction.skipToPrevious,
       },
       processingState: const {
         ProcessingState.idle: AudioProcessingState.idle,
@@ -63,9 +74,50 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
-  Future<void> loadSongWithMediaItem(AudioSource source, MediaItem item) async {
-    mediaItem.add(item);
-    await _player.setAudioSource(source);
+  // Methode om een specifiek liedje direct te laden en te spelen met playlist-beheer
+  Future<void> playSongAtIndex(int index, List<String> newPlaylist, Map<String, String> newImages) async {
+    playlist = newPlaylist;
+    localImagePaths = newImages;
+    currentIndex = index;
+
+    final songPath = playlist[currentIndex];
+    final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+    final localImagePath = localImagePaths[songPath];
+
+    Uri? artUri;
+    if (localImagePath != null) {
+      final imageFile = File(localImagePath);
+      if (await imageFile.exists()) {
+        artUri = Uri.parse('file://${imageFile.path}');
+      }
+    }
+
+    mediaItem.add(
+      MediaItem(
+        id: songPath,
+        album: 'Mijn MP3 Map',
+        title: baseName,
+        artist: 'Onbekende Artiest',
+        artUri: artUri,
+      ),
+    );
+
+    await _player.setAudioSource(AudioSource.asset(songPath));
+    await _player.play();
+  }
+
+  @override
+  Future<void> skipToNext() async {
+    if (playlist.isEmpty) return;
+    currentIndex = (currentIndex + 1) % playlist.length; // Ga naar volgende, cirkel terug naar begin als je bij de laatste bent
+    await playSongAtIndex(currentIndex, playlist, localImagePaths);
+  }
+
+  @override
+  Future<void> skipToPrevious() async {
+    if (playlist.isEmpty) return;
+    currentIndex = (currentIndex - 1 + playlist.length) % playlist.length; // Ga naar vorige, cirkel door naar achteren als je bij de eerste bent
+    await playSongAtIndex(currentIndex, playlist, localImagePaths);
   }
 }
 
@@ -95,6 +147,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   bool _isLoading = true;
   int? _currentIndex;
   bool _isPlaying = false;
+  MediaItem? _currentMediaItem;
 
   @override
   void initState() {
@@ -104,6 +157,16 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     audioHandler.playbackState.listen((state) {
       setState(() {
         _isPlaying = state.playing;
+      });
+    });
+
+    audioHandler.mediaItem.listen((item) {
+      setState(() {
+        _currentMediaItem = item;
+        if (item != null) {
+          // Zoek de index op basis van het id (songPath)
+          _currentIndex = _playlist.indexOf(item.id);
+        }
       });
     });
   }
@@ -145,49 +208,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       });
     }
   }
-  
-  Future<void> _playSong(int index) async {
-    try {
-      final songPath = _playlist[index];
-      final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-      
-      final localImagePath = _localImagePaths[songPath];
-      
-      Uri? artUri;
-      if (localImagePath != null) {
-        final imageFile = File(localImagePath);
-        if (await imageFile.exists()) {
-          artUri = Uri.parse('file://${imageFile.path}');
-        }
-      }
-
-      await (audioHandler as MyAudioHandler).loadSongWithMediaItem(
-        AudioSource.asset(songPath),
-        MediaItem(
-          id: songPath,
-          album: 'Mijn MP3 Map',
-          title: baseName,
-          artist: 'Onbekende Artiest',
-          artUri: artUri,
-        ),
-      );
-
-      await audioHandler.play();
-      setState(() {
-        _currentIndex = index;
-      });
-    } catch (e) {
-      debugPrint("Fout bij afspelen: $e");
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    // Haal het lokale pad van de hoes op van het huidige nummer (indien geselecteerd)
-    final currentSongPath = _currentIndex != null ? _playlist[_currentIndex!] : null;
-    final currentImagePath = currentSongPath != null ? _localImagePaths[currentSongPath] : null;
-    final currentSongName = currentSongPath != null 
-        ? currentSongPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '') 
+    final currentImagePath = _currentIndex != null && _currentIndex! < _playlist.length
+        ? _localImagePaths[_playlist[_currentIndex!]]
         : null;
 
     return Scaffold(
@@ -207,7 +232,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     final imagePath = _localImagePaths[songPath];
 
                     return ListTile(
-                      // Toon ook een klein miniatuurtje in de lijst voor extra overzicht
                       leading: imagePath != null && File(imagePath).existsSync()
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(4),
@@ -224,46 +248,58 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       trailing: isSelected && _isPlaying
                           ? const Icon(Icons.volume_up, color: Colors.green)
                           : null,
-                      onTap: () => _playSong(index),
+                      onTap: () {
+                        audioHandler.playSongAtIndex(index, _playlist, _localImagePaths);
+                      },
                     );
                   },
                 ),
       
-      // DE "NOW PLAYING" BALK ONDERAAN HET SCHERM MET ALBUMHOES
+      // UITGEBREIDE SPELERBALK ONDERAAN MET PREVIOUS, PLAY/PAUSE EN NEXT
       bottomNavigationBar: _currentIndex != null
           ? Container(
               color: Colors.grey[900],
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
                 children: [
-                  // Grote albumhoes in de spelerbalk
+                  // Albumhoes
                   if (currentImagePath != null && File(currentImagePath).existsSync())
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: Image.file(
                         File(currentImagePath),
-                        width: 55,
-                        height: 55,
+                        width: 50,
+                        height: 50,
                         fit: BoxFit.cover,
                       ),
                     )
                   else
                     Container(
-                      width: 55,
-                      height: 55,
+                      width: 50,
+                      height: 50,
                       color: Colors.grey[800],
                       child: const Icon(Icons.music_note, color: Colors.white),
                     ),
-                  const SizedBox(width: 12),
-                  // Titel van het nummer
+                  const SizedBox(width: 10),
+                  
+                  // Titel
                   Expanded(
                     child: Text(
-                      currentSongName ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      _currentMediaItem?.title ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+
+                  // Vorige knop
+                  IconButton(
+                    icon: const Icon(Icons.skip_previous),
+                    iconSize: 32,
+                    color: Colors.white,
+                    onPressed: () => audioHandler.skipToPrevious(),
+                  ),
+
                   // Play / Pause knop
                   IconButton(
                     icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
@@ -276,6 +312,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         await audioHandler.play();
                       }
                     },
+                  ),
+
+                  // Volgende knop
+                  IconButton(
+                    icon: const Icon(Icons.skip_next),
+                    iconSize: 32,
+                    color: Colors.white,
+                    onPressed: () => audioHandler.skipToNext(),
                   ),
                 ],
               ),
