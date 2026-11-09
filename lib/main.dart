@@ -34,7 +34,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   late final AudioPlayer _audioPlayer;
   List<String> _playlist = [];
   
-  // HIER IS DE ONTBRAKENDE VARIABELE TOEGEVOEGD:
+  // Opslagplaats voor de gekopieerde lokale afbeeldingspaden (voor CarPlay/posters)
   final Map<String, String> _localImagePaths = {};
   
   bool _isLoading = true;
@@ -65,7 +65,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
       final assets = manifest.listAssets();
 
-      // Filter alle MP3's
+      // Filter alle MP3's uit assets/mijnliedjes/
       final mp3Files = assets
           .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
           .toList();
@@ -103,9 +103,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     try {
       final songPath = _playlist[index];
       
-      // Bepaal de bestandsnaam zonder extensie (bijv. "liedje1" uit "assets/mijnliedjes/liedje1.mp3")
+      // Bepaal de bestandsnaam zonder extensie
       final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-      final imagePath = 'assets/mijnliedjes/$baseName.jpg';
+      
+      // Haal het lokale bestandspad van de tijdelijke afbeelding op voor de poster/albumhoes
+      final localImagePath = _localImagePaths[songPath];
+      final artUri = localImagePath != null ? Uri.file(localImagePath) : null;
 
       // Laad en speel het liedje af met metadata voor CarPlay
       await _audioPlayer.setAudioSource(
@@ -116,8 +119,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             album: 'Mijn MP3 Map',
             title: baseName,
             artist: 'Onbekende Artiest',
-            // Hier koppelen we de afbeelding voor CarPlay / het scherm
-            artUri: Uri.parse('asset:///$imagePath'),
+            // Gecorrigeerde Uri zodat CarPlay de poster netjes kan inladen
+            artUri: artUri,
           ),
         ),
       );
@@ -169,4 +172,3 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 }
-
