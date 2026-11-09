@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:audiotags/audiotags.dart'; // Toegevoegd voor ID3-tags
 
 late MyAudioHandler audioHandler;
 
@@ -221,57 +222,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     });
   }
 
-  (String artist, String title) _parseSongName(String fileNameWithoutExt) {
-    String artist = 'Onbekende Artiest';
-    String title = fileNameWithoutExt;
-
-    final dashIndex = fileNameWithoutExt.indexOf('-');
-    if (dashIndex != -1) {
-      artist = fileNameWithoutExt.substring(0, dashIndex).trim();
-      title = fileNameWithoutExt.substring(dashIndex + 1).trim().replaceAll('-', ' ');
-    }
-    return (artist, title);
-  }
-
   Future<void> _loadSongs() async {
     try {
       List<SongItem> loadedSongs = [];
       final appDocDir = await getApplicationDocumentsDirectory();
 
-      // 1. Laad assets
-      try {
-        final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-        final assets = manifest.listAssets();
-        final assetMp3s = assets
-            .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
-            .toList();
-
-        for (var songPath in assetMp3s) {
-          final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-          final (artist, title) = _parseSongName(baseName);
-          final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
-
-          String? localImgPath;
-          try {
-            final byteData = await rootBundle.load(imageAssetPath);
-            final file = File('${appDocDir.path}/$baseName.jpg');
-            await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
-            localImgPath = file.path;
-          } catch (_) {}
-
-          loadedSongs.add(SongItem(
-            path: songPath,
-            title: title,
-            artist: artist,
-            imagePath: localImgPath,
-            isAsset: true,
-          ));
-        }
-      } catch (e) {
-        debugPrint("Fout bij laden assets: $e");
-      }
-
-      // 2. Scan Documenten-map voor handmatig toegevoegde bestanden
+      // 1. Scan de Documenten-map voor echte MP3-bestanden en lees ID3-tags uit
       try {
         final dirFiles = appDocDir.listSync();
         for (var entity in dirFiles) {
@@ -279,20 +235,35 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             final fileNameWithExt = entity.path.split('/').last;
             final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
             
-            final (artist, title) = _parseSongName(baseName);
+            String artist = 'Onbekende Artiest';
+            String title = baseName;
 
+            // Probeer ID3-tags uit te lezen via de audiotags package
+            try {
+              final tag = await Audiotags.readAudioTag(entity.path);
+              if (tag != null) {
+                if (tag.artist != null && tag.artist!.trim().isNotEmpty) {
+                  artist = tag.artist!.trim();
+                }
+                if (tag.title != null && tag.title!.trim().isNotEmpty) {
+                  title = tag.title!.trim();
+                }
+              }
+            } catch (e) {
+              debugPrint("Kon ID3 tags niet lezen voor ${entity.path}: $e");
+            }
+
+            // Check of er een bijbehorende .jpg in de map staat
             final potentialImage = File('${appDocDir.path}/$baseName.jpg');
             String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
-            if (!loadedSongs.any((s) => s.title.toLowerCase() == title.toLowerCase())) {
-              loadedSongs.add(SongItem(
-                path: entity.path,
-                title: title,
-                artist: artist,
-                imagePath: imgPath,
-                isAsset: false,
-              ));
-            }
+            loadedSongs.add(SongItem(
+              path: entity.path,
+              title: title,
+              artist: artist,
+              imagePath: imgPath,
+              isAsset: false,
+            ));
           }
         }
       } catch (e) {
@@ -341,7 +312,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _playlist.isEmpty
-              ? const Center(child: Text('Geen liedjes gevonden! Zet ze in assets of de Documenten-map.'))
+              ? const Center(child: Text('Geen liedjes gevonden in de Documenten-map!'))
               : ListView.builder(
                   itemCount: _playlist.length,
                   itemBuilder: (context, index) {
@@ -376,7 +347,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   },
                 ),
       
-      // Onderste mini-speler balk blijft netjes onderaan de lijst staan
       bottomNavigationBar: _currentIndex != null
           ? GestureDetector(
               onTap: _openNowPlayingScreen,
@@ -460,7 +430,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 }
 
-// Volledig scherm voor "Now Playing" dat opent als je op de onderste balk tikt
+// Volledig scherm voor "Now Playing"
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -504,7 +474,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Zoek de actieve song op basis van de huidige media item om de afbeelding te vinden
     final currentPath = _currentMediaItem?.id;
     final currentSong = audioHandler.playlist.firstWhere(
       (s) => s.path == currentPath,
@@ -565,7 +534,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             ),
             const SizedBox(height: 24),
             
-            // Voortgangsbalk & Doorspoelen
             StreamBuilder<Duration>(
               stream: audioHandler.positionStream,
               builder: (context, snapshotPosition) {
