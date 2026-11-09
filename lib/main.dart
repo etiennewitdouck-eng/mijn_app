@@ -1,7 +1,9 @@
+import 'dart:io'; // Nodig voor de 'File' klasse
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:path_provider/path_provider.dart'; // Nodig voor getTemporaryDirectory()
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,7 +33,10 @@ class MusicPlayerPage extends StatefulWidget {
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
   late final AudioPlayer _audioPlayer;
   List<String> _playlist = [];
-  List<String> _albumArts = [];
+  
+  // HIER IS DE ONTBRAKENDE VARIABELE TOEGEVOEGD:
+  final Map<String, String> _localImagePaths = {};
+  
   bool _isLoading = true;
   int? _currentIndex;
   bool _isPlaying = false;
@@ -55,8 +60,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     super.dispose();
   }
 
-  
-Future<void> _loadSongsFromAssets() async {
+  Future<void> _loadSongsFromAssets() async {
     try {
       final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
       final assets = manifest.listAssets();
@@ -104,7 +108,6 @@ Future<void> _loadSongsFromAssets() async {
       final imagePath = 'assets/mijnliedjes/$baseName.jpg';
 
       // Laad en speel het liedje af met metadata voor CarPlay
-      // We gebruiken AudioSource.asset i.c.m. tag voor de weergave
       await _audioPlayer.setAudioSource(
         AudioSource.asset(
           songPath,
@@ -166,3 +169,4 @@ Future<void> _loadSongsFromAssets() async {
     );
   }
 }
+
