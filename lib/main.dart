@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
-import 'package:path_provider/path_provider.dart'; // Nodig voor getTemporaryDirectory()
+import 'package:path_provider/path_provider.dart'; // Nodig voor getApplicationDocumentsDirectory()
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,18 +70,20 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
           .toList();
 
-      final tempDir = await getTemporaryDirectory();
+      // Opslaan in de Documenten-map zodat CarPlay en het systeem erbij kunnen
+      final appDocDir = await getApplicationDocumentsDirectory();
+      
       for (var songPath in mp3Files) {
         final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
         final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
 
         try {
           final byteData = await rootBundle.load(imageAssetPath);
-          final file = File('${tempDir.path}/$baseName.jpg');
+          final file = File('${appDocDir.path}/$baseName.jpg');
           await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
           
           _localImagePaths[songPath] = file.path;
-          debugPrint("SUCCES: Afbeelding gekopieerd voor $baseName -> ${file.path}");
+          debugPrint("SUCCES: Afbeelding opgeslagen voor $baseName -> ${file.path}");
         } catch (e) {
           debugPrint("FOUT: Kon afbeelding niet vinden voor $imageAssetPath ($e)");
         }
@@ -99,48 +101,39 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     }
   }
   
-  Future<void> _loadSongsFromAssets() async {
+  Future<void> _playSong(int index) async {
     try {
-      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-      final assets = manifest.listAssets();
-
-      // Filter alle MP3's uit assets/mijnliedjes/
-      final mp3Files = assets
-          .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
-          .toList();
-
-      // GEBRUIK DOCUMENTS DIRECTORY IN PLAATS VAN TEMPORARY DIRECTORY
-      final appDocDir = await getApplicationDocumentsDirectory();
+      final songPath = _playlist[index];
       
-      for (var songPath in mp3Files) {
-        final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-        final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
+      // Bepaal de bestandsnaam zonder extensie
+      final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+      
+      // Haal het lokale bestandspad van de afbeelding op voor de poster/albumhoes
+      final localImagePath = _localImagePaths[songPath];
+      final artUri = localImagePath != null ? Uri.file(localImagePath) : null;
 
-        try {
-          final byteData = await rootBundle.load(imageAssetPath);
-          final file = File('${appDocDir.path}/$baseName.jpg');
-          await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
-          
-          _localImagePaths[songPath] = file.path;
-          debugPrint("SUCCES: Afbeelding opgeslagen in Documenten voor $baseName -> ${file.path}");
-        } catch (e) {
-          debugPrint("FOUT: Kon afbeelding niet vinden voor $imageAssetPath ($e)");
-        }
-      }
+      // Laad en speel het liedje af met metadata voor CarPlay
+      await _audioPlayer.setAudioSource(
+        AudioSource.asset(
+          songPath,
+          tag: MediaItem(
+            id: songPath,
+            album: 'Mijn MP3 Map',
+            title: baseName,
+            artist: 'Onbekende Artiest',
+            artUri: artUri,
+          ),
+        ),
+      );
 
+      await _audioPlayer.play();
       setState(() {
-        _playlist = mp3Files;
-        _isLoading = false;
+        _currentIndex = index;
       });
     } catch (e) {
-      debugPrint("Fout bij laden van assets: $e");
-      setState(() {
-        _isLoading = false;
-      });
+      debugPrint("Fout bij afspelen: $e");
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
