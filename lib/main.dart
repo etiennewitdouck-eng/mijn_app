@@ -215,7 +215,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     });
   }
 
-  // Betrouwbare splitsing van artiest en titel op basis van "Artiest - Titel.mp3"
   (String artist, String title) _parseSongName(String fileNameWithoutExt) {
     String artist = 'Onbekende Artiest';
     String title = fileNameWithoutExt;
