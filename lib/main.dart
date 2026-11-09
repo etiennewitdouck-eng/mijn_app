@@ -124,7 +124,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       if (localImagePath != null) {
         final imageFile = File(localImagePath);
         if (await imageFile.exists()) {
-          artUri = imageFile.uri; // Dit is de meest betrouwbare manier voor iOS en CarPlay
+          artUri = Uri.parse('file://$localImagePath');
           debugPrint("KARAKTER CHECK: Gelukt om file uri te maken: $artUri");
         }
       }
