@@ -77,7 +77,8 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     playlist = newPlaylist;
     currentIndex = initialIndex;
 
-    final sources = playlist.map((song) {
+    // Expliciet getypete lijst van AudioSource om typefouten te voorkomen
+    final List<AudioSource> sources = playlist.map((song) {
       Uri? artUri;
       if (song.imagePath != null) {
         final imageFile = File(song.imagePath!);
@@ -86,20 +87,19 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
         }
       }
 
-      // Ondersteunt zowel asset-bronnen als losse bestanden uit de Documenten-map
-      AudioSource source = song.isAsset 
-          ? AudioSource.asset(song.path)
-          : AudioSource.file(song.path);
-
-      return source.copyWithTag(
-        MediaItem(
-          id: song.path,
-          album: 'Mijn MP3 Map',
-          title: song.title,
-          artist: 'Onbekende Artiest',
-          artUri: artUri,
-        ),
+      final mediaItemTag = MediaItem(
+        id: song.path,
+        album: 'Mijn MP3 Map',
+        title: song.title,
+        artist: 'Onbekende Artiest',
+        artUri: artUri,
       );
+
+      if (song.isAsset) {
+        return AudioSource.asset(song.path, tag: mediaItemTag);
+      } else {
+        return AudioSource.file(song.path, tag: mediaItemTag);
+      }
     }).toList();
 
     await _player.setAudioSource(ConcatenatingAudioSource(children: sources), initialIndex: currentIndex);
@@ -151,7 +151,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 }
 
-// Handig modelje om liedjes te beheren (zowel assets als losse bestanden)
 class SongItem {
   final String path;
   final String title;
@@ -209,13 +208,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     });
   }
 
-  // Laadt zowel assets ALS bestanden die je zelf handmatig in de Documenten-map hebt gezet
   Future<void> _loadSongs() async {
     try {
       List<SongItem> loadedSongs = [];
       final appDocDir = await getApplicationDocumentsDirectory();
 
-      // 1. Laad liedjes uit de assets/mijnliedjes/ map
+      // 1. Laad assets
       try {
         final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
         final assets = manifest.listAssets();
@@ -227,7 +225,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
           final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
 
-          // Kopieer asset afbeelding naar Documenten voor het geval dat
           String? localImgPath;
           try {
             final byteData = await rootBundle.load(imageAssetPath);
@@ -244,10 +241,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           ));
         }
       } catch (e) {
-        debugPrint("Geen assets gevonden of fout bij laden: $e");
+        debugPrint("Fout bij laden assets: $e");
       }
 
-      // 2. Scan de Documenten-map op extra handmatig toegevoegde MP3's
+      // 2. Scan Documenten-map voor handmatig toegevoegde bestanden
       try {
         final dirFiles = appDocDir.listSync();
         for (var entity in dirFiles) {
@@ -255,11 +252,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             final fileNameWithExt = entity.path.split('/').last;
             final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
             
-            // Check of er een bijbehorende .jpg in de Documenten-map staat
             final potentialImage = File('${appDocDir.path}/$baseName.jpg');
             String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
-            // Voorkom dubbel toevoegen als het al via assets liep
             if (!loadedSongs.any((s) => s.title.toLowerCase() == baseName.toLowerCase())) {
               loadedSongs.add(SongItem(
                 path: entity.path,
@@ -279,7 +274,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint("Fout bij laden van liedjes: $e");
+      debugPrint("Fout bij algemeen laden: $e");
       setState(() {
         _isLoading = false;
       });
@@ -409,7 +404,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadSongs, // Handige knop om map opnieuw te scannen
+            onPressed: _loadSongs,
             tooltip: 'Vernieuw liedjes',
           ),
         ],
