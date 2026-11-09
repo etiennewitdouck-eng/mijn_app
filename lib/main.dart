@@ -11,7 +11,6 @@ late AudioHandler audioHandler;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialiseer AudioService zodat CarPlay en Lock Screen de metadata oppikken
   audioHandler = await AudioService.init(
     builder: () => MyAudioHandler(),
     config: const AudioServiceConfig(
@@ -24,12 +23,10 @@ void main() async {
   runApp(const MyApp());
 }
 
-/// Specifieke AudioHandler om liedjes en metadata (zoals artUri) door te sturen naar iOS/CarPlay
 class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player = AudioPlayer();
 
   MyAudioHandler() {
-    // Koppel de spelerstatus aan audio_service
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
   }
 
@@ -66,9 +63,8 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
-  // Methode om audio én de MediaItem (met artUri voor CarPlay) in te stellen
   Future<void> loadSongWithMediaItem(AudioSource source, MediaItem item) async {
-    mediaItem.add(item); // Dit stuurt de metadata en poster naar CarPlay / iOS!
+    mediaItem.add(item);
     await _player.setAudioSource(source);
   }
 }
@@ -105,7 +101,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     super.initState();
     _loadSongsFromAssets();
 
-    // Luister naar speelstatus om de UI te updaten
     audioHandler.playbackState.listen((state) {
       setState(() {
         _isPlaying = state.playing;
@@ -162,22 +157,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       if (localImagePath != null) {
         final imageFile = File(localImagePath);
         if (await imageFile.exists()) {
-          artUri = Uri.parse('file://$localImagePath');
+          artUri = Uri.parse('file://${imageFile.path}');
         }
       }
 
-      // Visuele melding op je iPhone-scherm zodat je direct ziet wat er gebeurt
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Speelt: $baseName | Poster Uri: ${artUri != null ? "Gekoppeld" : "Ontbreekt"}'),
-            duration: const Duration(seconds: 4),
-            backgroundColor: artUri != null ? Colors.green[800] : Colors.red[800],
-          ),
-        );
-      }
-
-      // Geef de audiobron en de MediaItem mee aan onze AudioHandler
       await (audioHandler as MyAudioHandler).loadSongWithMediaItem(
         AudioSource.asset(songPath),
         MediaItem(
@@ -195,16 +178,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       });
     } catch (e) {
       debugPrint("Fout bij afspelen: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fout bij afspelen: $e'), backgroundColor: Colors.red),
-        );
-      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Haal het lokale pad van de hoes op van het huidige nummer (indien geselecteerd)
+    final currentSongPath = _currentIndex != null ? _playlist[_currentIndex!] : null;
+    final currentImagePath = currentSongPath != null ? _localImagePaths[currentSongPath] : null;
+    final currentSongName = currentSongPath != null 
+        ? currentSongPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '') 
+        : null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mijn MP3 Auto Speler'),
@@ -216,14 +201,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               : ListView.builder(
                   itemCount: _playlist.length,
                   itemBuilder: (context, index) {
-                    final fileName = _playlist[index].split('/').last;
+                    final songPath = _playlist[index];
+                    final fileName = songPath.split('/').last;
                     final isSelected = _currentIndex == index;
+                    final imagePath = _localImagePaths[songPath];
 
                     return ListTile(
-                      leading: Icon(
-                        isSelected && _isPlaying ? Icons.pause_circle : Icons.music_note,
-                        color: isSelected ? Colors.green : Colors.white,
-                      ),
+                      // Toon ook een klein miniatuurtje in de lijst voor extra overzicht
+                      leading: imagePath != null && File(imagePath).existsSync()
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Image.file(File(imagePath), width: 45, height: 45, fit: BoxFit.cover),
+                            )
+                          : const Icon(Icons.music_note),
                       title: Text(
                         fileName,
                         style: TextStyle(
@@ -238,6 +228,59 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     );
                   },
                 ),
+      
+      // DE "NOW PLAYING" BALK ONDERAAN HET SCHERM MET ALBUMHOES
+      bottomNavigationBar: _currentIndex != null
+          ? Container(
+              color: Colors.grey[900],
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  // Grote albumhoes in de spelerbalk
+                  if (currentImagePath != null && File(currentImagePath).existsSync())
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.file(
+                        File(currentImagePath),
+                        width: 55,
+                        height: 55,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 55,
+                      height: 55,
+                      color: Colors.grey[800],
+                      child: const Icon(Icons.music_note, color: Colors.white),
+                    ),
+                  const SizedBox(width: 12),
+                  // Titel van het nummer
+                  Expanded(
+                    child: Text(
+                      currentSongName ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  // Play / Pause knop
+                  IconButton(
+                    icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                    iconSize: 42,
+                    color: Colors.green,
+                    onPressed: () async {
+                      if (_isPlaying) {
+                        await audioHandler.pause();
+                      } else {
+                        await audioHandler.play();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            )
+          : null,
     );
   }
 }
