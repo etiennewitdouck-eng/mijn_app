@@ -24,14 +24,12 @@ void main() async {
 
 class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player = AudioPlayer();
-  List<String> playlist = [];
-  Map<String, String> localImagePaths = {};
+  List<SongItem> playlist = [];
   int currentIndex = 0;
 
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
     
-    // Luister naar index-veranderingen vanuit de playlist van just_audio om de UI te synchroniseren
     _player.currentIndexStream.listen((index) {
       if (index != null && index < playlist.length) {
         currentIndex = index;
@@ -75,31 +73,29 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
-  // Initialiseer de volledige playlist in just_audio (zodat automatisch doorspelen werkt)
-  Future<void> setPlaylist(List<String> newPlaylist, Map<String, String> newImages, int initialIndex) async {
+  Future<void> setPlaylist(List<SongItem> newPlaylist, int initialIndex) async {
     playlist = newPlaylist;
-    localImagePaths = newImages;
     currentIndex = initialIndex;
 
-    // Maak een ConcatenatingAudioSource aan zodat de speler automatisch doorgaat naar het volgende lied
-    final sources = playlist.map((songPath) {
-      final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-      final localImagePath = localImagePaths[songPath];
-
+    final sources = playlist.map((song) {
       Uri? artUri;
-      if (localImagePath != null) {
-        final imageFile = File(localImagePath);
+      if (song.imagePath != null) {
+        final imageFile = File(song.imagePath!);
         if (imageFile.existsSync()) {
           artUri = Uri.parse('file://${imageFile.path}');
         }
       }
 
-      return AudioSource.asset(
-        songPath,
-        tag: MediaItem(
-          id: songPath,
+      // Ondersteunt zowel asset-bronnen als losse bestanden uit de Documenten-map
+      AudioSource source = song.isAsset 
+          ? AudioSource.asset(song.path)
+          : AudioSource.file(song.path);
+
+      return source.copyWithTag(
+        MediaItem(
+          id: song.path,
           album: 'Mijn MP3 Map',
-          title: baseName,
+          title: song.title,
           artist: 'Onbekende Artiest',
           artUri: artUri,
         ),
@@ -113,13 +109,11 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
 
   void _updateMediaItemForCurrentIndex() {
     if (playlist.isEmpty || currentIndex >= playlist.length) return;
-    final songPath = playlist[currentIndex];
-    final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-    final localImagePath = localImagePaths[songPath];
+    final song = playlist[currentIndex];
 
     Uri? artUri;
-    if (localImagePath != null) {
-      final imageFile = File(localImagePath);
+    if (song.imagePath != null) {
+      final imageFile = File(song.imagePath!);
       if (imageFile.existsSync()) {
         artUri = Uri.parse('file://${imageFile.path}');
       }
@@ -127,9 +121,9 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
 
     mediaItem.add(
       MediaItem(
-        id: songPath,
+        id: song.path,
         album: 'Mijn MP3 Map',
-        title: baseName,
+        title: song.title,
         artist: 'Onbekende Artiest',
         artUri: artUri,
       ),
@@ -141,7 +135,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     if (_player.hasNext) {
       await _player.seekToNext();
     } else {
-      await _player.seek(Duration.zero, index: 0); // Terug naar het begin van de lijst
+      await _player.seek(Duration.zero, index: 0);
     }
     await _player.play();
   }
@@ -151,10 +145,20 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     if (_player.hasPrevious) {
       await _player.seekToPrevious();
     } else {
-      await _player.seek(Duration.zero, index: playlist.length - 1); // Naar het laatste lied
+      await _player.seek(Duration.zero, index: playlist.length - 1);
     }
     await _player.play();
   }
+}
+
+// Handig modelje om liedjes te beheren (zowel assets als losse bestanden)
+class SongItem {
+  final String path;
+  final String title;
+  final String? imagePath;
+  final bool isAsset;
+
+  SongItem({required this.path, required this.title, this.imagePath, required this.isAsset});
 }
 
 class MyApp extends StatelessWidget {
@@ -178,8 +182,7 @@ class MusicPlayerPage extends StatefulWidget {
 }
 
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
-  List<String> _playlist = [];
-  final Map<String, String> _localImagePaths = {};
+  List<SongItem> _playlist = [];
   bool _isLoading = true;
   int? _currentIndex;
   bool _isPlaying = false;
@@ -188,7 +191,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   @override
   void initState() {
     super.initState();
-    _loadSongsFromAssets();
+    _loadSongs();
 
     audioHandler.playbackState.listen((state) {
       setState(() {
@@ -200,44 +203,83 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       setState(() {
         _currentMediaItem = item;
         if (item != null) {
-          _currentIndex = _playlist.indexOf(item.id);
+          _currentIndex = _playlist.indexWhere((song) => song.path == item.id);
         }
       });
     });
   }
 
-  Future<void> _loadSongsFromAssets() async {
+  // Laadt zowel assets ALS bestanden die je zelf handmatig in de Documenten-map hebt gezet
+  Future<void> _loadSongs() async {
     try {
-      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-      final assets = manifest.listAssets();
-
-      final mp3Files = assets
-          .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
-          .toList();
-
+      List<SongItem> loadedSongs = [];
       final appDocDir = await getApplicationDocumentsDirectory();
-      
-      for (var songPath in mp3Files) {
-        final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-        final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
 
-        try {
-          final byteData = await rootBundle.load(imageAssetPath);
-          final file = File('${appDocDir.path}/$baseName.jpg');
-          await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
-          
-          _localImagePaths[songPath] = file.path;
-        } catch (e) {
-          debugPrint("Geen afbeelding gevonden voor $baseName ($e)");
+      // 1. Laad liedjes uit de assets/mijnliedjes/ map
+      try {
+        final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+        final assets = manifest.listAssets();
+        final assetMp3s = assets
+            .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
+            .toList();
+
+        for (var songPath in assetMp3s) {
+          final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+          final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
+
+          // Kopieer asset afbeelding naar Documenten voor het geval dat
+          String? localImgPath;
+          try {
+            final byteData = await rootBundle.load(imageAssetPath);
+            final file = File('${appDocDir.path}/$baseName.jpg');
+            await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+            localImgPath = file.path;
+          } catch (_) {}
+
+          loadedSongs.add(SongItem(
+            path: songPath,
+            title: baseName,
+            imagePath: localImgPath,
+            isAsset: true,
+          ));
         }
+      } catch (e) {
+        debugPrint("Geen assets gevonden of fout bij laden: $e");
+      }
+
+      // 2. Scan de Documenten-map op extra handmatig toegevoegde MP3's
+      try {
+        final dirFiles = appDocDir.listSync();
+        for (var entity in dirFiles) {
+          if (entity is File && entity.path.toLowerCase().endsWith('.mp3')) {
+            final fileNameWithExt = entity.path.split('/').last;
+            final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+            
+            // Check of er een bijbehorende .jpg in de Documenten-map staat
+            final potentialImage = File('${appDocDir.path}/$baseName.jpg');
+            String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
+
+            // Voorkom dubbel toevoegen als het al via assets liep
+            if (!loadedSongs.any((s) => s.title.toLowerCase() == baseName.toLowerCase())) {
+              loadedSongs.add(SongItem(
+                path: entity.path,
+                title: baseName,
+                imagePath: imgPath,
+                isAsset: false,
+              ));
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint("Fout bij scannen Documenten-map: $e");
       }
 
       setState(() {
-        _playlist = mp3Files;
+        _playlist = loadedSongs;
         _isLoading = false;
       });
     } catch (e) {
-      debugPrint("Fout bij laden van assets: $e");
+      debugPrint("Fout bij laden van liedjes: $e");
       setState(() {
         _isLoading = false;
       });
@@ -252,14 +294,14 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       builder: (context) {
         return StatefulBuilder(
           builder: (BuildContext context, StateSetter setStateModal) {
-            // Zorg dat de modal ook update als de mediaItem wijzigt
             audioHandler.mediaItem.listen((_) {
               if (mounted) setStateModal(() {});
             });
 
-            final currentImagePath = _currentIndex != null && _currentIndex! < _playlist.length
-                ? _localImagePaths[_playlist[_currentIndex!]]
+            final currentSong = _currentIndex != null && _currentIndex! < _playlist.length
+                ? _playlist[_currentIndex!]
                 : null;
+            final currentImagePath = currentSong?.imagePath;
 
             return FractionallySizedBox(
               heightFactor: 0.85,
@@ -356,35 +398,41 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
   @override
   Widget build(BuildContext context) {
-    final currentImagePath = _currentIndex != null && _currentIndex! < _playlist.length
-        ? _localImagePaths[_playlist[_currentIndex!]]
+    final currentSong = _currentIndex != null && _currentIndex! < _playlist.length
+        ? _playlist[_currentIndex!]
         : null;
+    final currentImagePath = currentSong?.imagePath;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Mijn MP3 Auto Speler'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadSongs, // Handige knop om map opnieuw te scannen
+            tooltip: 'Vernieuw liedjes',
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _playlist.isEmpty
-              ? const Center(child: Text('Geen liedjes gevonden in assets/mijnliedjes/'))
+              ? const Center(child: Text('Geen liedjes gevonden! Zet ze in assets of de Documenten-map.'))
               : ListView.builder(
                   itemCount: _playlist.length,
                   itemBuilder: (context, index) {
-                    final songPath = _playlist[index];
-                    final fileName = songPath.split('/').last;
+                    final song = _playlist[index];
                     final isSelected = _currentIndex == index;
-                    final imagePath = _localImagePaths[songPath];
 
                     return ListTile(
-                      leading: imagePath != null && File(imagePath).existsSync()
+                      leading: song.imagePath != null && File(song.imagePath!).existsSync()
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(4),
-                              child: Image.file(File(imagePath), width: 45, height: 45, fit: BoxFit.cover),
+                              child: Image.file(File(song.imagePath!), width: 45, height: 45, fit: BoxFit.cover),
                             )
                           : const Icon(Icons.music_note),
                       title: Text(
-                        fileName,
+                        song.title,
                         style: TextStyle(
                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                           color: isSelected ? Colors.green : Colors.white,
@@ -394,8 +442,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           ? const Icon(Icons.volume_up, color: Colors.green)
                           : null,
                       onTap: () {
-                        // Start de complete afspeellijst in just_audio
-                        audioHandler.setPlaylist(_playlist, _localImagePaths, index);
+                        audioHandler.setPlaylist(_playlist, index);
                       },
                     );
                   },
