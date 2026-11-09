@@ -99,50 +99,48 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     }
   }
   
-  Future<void> _playSong(int index) async {
+  Future<void> _loadSongsFromAssets() async {
     try {
-      final songPath = _playlist[index];
-      final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+      final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
+      final assets = manifest.listAssets();
+
+      // Filter alle MP3's uit assets/mijnliedjes/
+      final mp3Files = assets
+          .where((String key) => key.startsWith('assets/mijnliedjes/') && key.toLowerCase().endsWith('.mp3'))
+          .toList();
+
+      // GEBRUIK DOCUMENTS DIRECTORY IN PLAATS VAN TEMPORARY DIRECTORY
+      final appDocDir = await getApplicationDocumentsDirectory();
       
-      final localImagePath = _localImagePaths[songPath];
-      bool fileExists = false;
-      if (localImagePath != null) {
-        fileExists = await File(localImagePath).exists();
+      for (var songPath in mp3Files) {
+        final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+        final imageAssetPath = 'assets/mijnliedjes/$baseName.jpg';
+
+        try {
+          final byteData = await rootBundle.load(imageAssetPath);
+          final file = File('${appDocDir.path}/$baseName.jpg');
+          await file.writeAsBytes(byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes));
+          
+          _localImagePaths[songPath] = file.path;
+          debugPrint("SUCCES: Afbeelding opgeslagen in Documenten voor $baseName -> ${file.path}");
+        } catch (e) {
+          debugPrint("FOUT: Kon afbeelding niet vinden voor $imageAssetPath ($e)");
+        }
       }
 
-      // Toon een melding op het scherm van je iPhone met de status!
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Pad: ${localImagePath != null ? "Ja" : "Nee"} | Bestaat: $fileExists'),
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
-
-      final artUri = localImagePath != null ? Uri.file(localImagePath) : null;
-
-      await _audioPlayer.setAudioSource(
-        AudioSource.asset(
-          songPath,
-          tag: MediaItem(
-            id: songPath,
-            album: 'Mijn MP3 Map',
-            title: baseName,
-            artist: 'Onbekende Artiest',
-            artUri: artUri,
-          ),
-        ),
-      );
-
-      await _audioPlayer.play();
       setState(() {
-        _currentIndex = index;
+        _playlist = mp3Files;
+        _isLoading = false;
       });
     } catch (e) {
-      debugPrint("Fout bij afspelen: $e");
+      debugPrint("Fout bij laden van assets: $e");
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
