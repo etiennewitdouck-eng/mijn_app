@@ -31,9 +31,11 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
     
-    _player.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
-        skipToNext();
+    // Luister naar index-veranderingen vanuit de playlist van just_audio om de UI te synchroniseren
+    _player.currentIndexStream.listen((index) {
+      if (index != null && index < playlist.length) {
+        currentIndex = index;
+        _updateMediaItemForCurrentIndex();
       }
     });
   }
@@ -73,11 +75,44 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
-  Future<void> playSongAtIndex(int index, List<String> newPlaylist, Map<String, String> newImages) async {
+  // Initialiseer de volledige playlist in just_audio (zodat automatisch doorspelen werkt)
+  Future<void> setPlaylist(List<String> newPlaylist, Map<String, String> newImages, int initialIndex) async {
     playlist = newPlaylist;
     localImagePaths = newImages;
-    currentIndex = index;
+    currentIndex = initialIndex;
 
+    // Maak een ConcatenatingAudioSource aan zodat de speler automatisch doorgaat naar het volgende lied
+    final sources = playlist.map((songPath) {
+      final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+      final localImagePath = localImagePaths[songPath];
+
+      Uri? artUri;
+      if (localImagePath != null) {
+        final imageFile = File(localImagePath);
+        if (imageFile.existsSync()) {
+          artUri = Uri.parse('file://${imageFile.path}');
+        }
+      }
+
+      return AudioSource.asset(
+        songPath,
+        tag: MediaItem(
+          id: songPath,
+          album: 'Mijn MP3 Map',
+          title: baseName,
+          artist: 'Onbekende Artiest',
+          artUri: artUri,
+        ),
+      );
+    }).toList();
+
+    await _player.setAudioSource(ConcatenatingAudioSource(children: sources), initialIndex: currentIndex);
+    _updateMediaItemForCurrentIndex();
+    await _player.play();
+  }
+
+  void _updateMediaItemForCurrentIndex() {
+    if (playlist.isEmpty || currentIndex >= playlist.length) return;
     final songPath = playlist[currentIndex];
     final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
     final localImagePath = localImagePaths[songPath];
@@ -85,7 +120,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     Uri? artUri;
     if (localImagePath != null) {
       final imageFile = File(localImagePath);
-      if (await imageFile.exists()) {
+      if (imageFile.existsSync()) {
         artUri = Uri.parse('file://${imageFile.path}');
       }
     }
@@ -99,23 +134,26 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
         artUri: artUri,
       ),
     );
-
-    await _player.setAudioSource(AudioSource.asset(songPath));
-    await _player.play();
   }
 
   @override
   Future<void> skipToNext() async {
-    if (playlist.isEmpty) return;
-    currentIndex = (currentIndex + 1) % playlist.length;
-    await playSongAtIndex(currentIndex, playlist, localImagePaths);
+    if (_player.hasNext) {
+      await _player.seekToNext();
+    } else {
+      await _player.seek(Duration.zero, index: 0); // Terug naar het begin van de lijst
+    }
+    await _player.play();
   }
 
   @override
   Future<void> skipToPrevious() async {
-    if (playlist.isEmpty) return;
-    currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
-    await playSongAtIndex(currentIndex, playlist, localImagePaths);
+    if (_player.hasPrevious) {
+      await _player.seekToPrevious();
+    } else {
+      await _player.seek(Duration.zero, index: playlist.length - 1); // Naar het laatste lied
+    }
+    await _player.play();
   }
 }
 
@@ -206,104 +244,111 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     }
   }
 
-  // Functie om het grote "Now Playing" scherm te openen
   void _openNowPlayingModal() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.grey[900],
       builder: (context) {
-        return FractionallySizedBox(
-          heightFactor: 0.85, // Vult 85% van het scherm
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Kleine sluit-streep bovenin
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[600],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const Spacer(),
-                // Grote Albumhoes
-                if (_currentIndex != null && _localImagePaths[_playlist[_currentIndex!]] != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.file(
-                      File(_localImagePaths[_playlist[_currentIndex!]]!),
-                      width: 280,
-                      height: 280,
-                      fit: BoxFit.cover,
-                    ),
-                  )
-                else
-                  Container(
-                    width: 280,
-                    height: 280,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[800],
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(Icons.music_note, size: 80, color: Colors.white),
-                  ),
-                const SizedBox(height: 32),
-                
-                // Titel van het nummer
-                Text(
-                  _currentMediaItem?.title ?? 'Geennummer',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Onbekende Artiest',
-                  style: TextStyle(fontSize: 16, color: Colors.grey),
-                ),
-                const Spacer(),
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setStateModal) {
+            // Zorg dat de modal ook update als de mediaItem wijzigt
+            audioHandler.mediaItem.listen((_) {
+              if (mounted) setStateModal(() {});
+            });
 
-                // Knoppenrij (Previous, Play/Pause, Next)
-                Row(
+            final currentImagePath = _currentIndex != null && _currentIndex! < _playlist.length
+                ? _localImagePaths[_playlist[_currentIndex!]]
+                : null;
+
+            return FractionallySizedBox(
+              heightFactor: 0.85,
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.skip_previous),
-                      iconSize: 48,
-                      color: Colors.white,
-                      onPressed: () => audioHandler.skipToPrevious(),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[600],
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                    const SizedBox(width: 24),
-                    IconButton(
-                      icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                      iconSize: 72,
-                      color: Colors.green,
-                      onPressed: () async {
-                        if (_isPlaying) {
-                          await audioHandler.pause();
-                        } else {
-                          await audioHandler.play();
-                        }
-                      },
+                    const Spacer(),
+                    if (currentImagePath != null && File(currentImagePath).existsSync())
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: Image.file(
+                          File(currentImagePath),
+                          width: 280,
+                          height: 280,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    else
+                      Container(
+                        width: 280,
+                        height: 280,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[800],
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(Icons.music_note, size: 80, color: Colors.white),
+                      ),
+                    const SizedBox(height: 32),
+                    Text(
+                      _currentMediaItem?.title ?? '',
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: 24),
-                    IconButton(
-                      icon: const Icon(Icons.skip_next),
-                      iconSize: 48,
-                      color: Colors.white,
-                      onPressed: () => audioHandler.skipToNext(),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Onbekende Artiest',
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
                     ),
+                    const Spacer(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.skip_previous),
+                          iconSize: 48,
+                          color: Colors.white,
+                          onPressed: () => audioHandler.skipToPrevious(),
+                        ),
+                        const SizedBox(width: 24),
+                        IconButton(
+                          icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                          iconSize: 72,
+                          color: Colors.green,
+                          onPressed: () async {
+                            if (_isPlaying) {
+                              await audioHandler.pause();
+                            } else {
+                              await audioHandler.play();
+                            }
+                            setStateModal(() {});
+                          },
+                        ),
+                        const SizedBox(width: 24),
+                        IconButton(
+                          icon: const Icon(Icons.skip_next),
+                          iconSize: 48,
+                          color: Colors.white,
+                          onPressed: () => audioHandler.skipToNext(),
+                        ),
+                      ],
+                    ),
+                    const Spacer(),
                   ],
                 ),
-                const Spacer(),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -349,13 +394,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           ? const Icon(Icons.volume_up, color: Colors.green)
                           : null,
                       onTap: () {
-                        audioHandler.playSongAtIndex(index, _playlist, _localImagePaths);
+                        // Start de complete afspeellijst in just_audio
+                        audioHandler.setPlaylist(_playlist, _localImagePaths, index);
                       },
                     );
                   },
                 ),
       
-      // ONDERSTE BALK: Klikbaar gemaakt met GestureDetector om de grote speler te openen
       bottomNavigationBar: _currentIndex != null
           ? GestureDetector(
               onTap: _openNowPlayingModal,
