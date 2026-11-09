@@ -38,6 +38,10 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     });
   }
 
+  // Streams voor de voortgangsbalk
+  Stream<Duration> get positionStream => _player.positionStream;
+  Stream<Duration?> get durationStream => _player.durationStream;
+
   PlaybackState _transformEvent(PlaybackEvent event) {
     return PlaybackState(
       controls: [
@@ -280,6 +284,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     }
   }
 
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return "$minutes:$seconds";
+  }
+
   void _openNowPlayingModal() {
     showModalBottomSheet(
       context: context,
@@ -318,22 +329,22 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         borderRadius: BorderRadius.circular(16),
                         child: Image.file(
                           File(currentImagePath),
-                          width: 280,
-                          height: 280,
+                          width: 260,
+                          height: 260,
                           fit: BoxFit.cover,
                         ),
                       )
                     else
                       Container(
-                        width: 280,
-                        height: 280,
+                        width: 260,
+                        height: 260,
                         decoration: BoxDecoration(
                           color: Colors.grey[800],
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: const Icon(Icons.music_note, size: 80, color: Colors.white),
                       ),
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 24),
                     Text(
                       _currentMediaItem?.title ?? '',
                       style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
@@ -341,11 +352,57 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     const Text(
                       'Onbekende Artiest',
-                      style: TextStyle(fontSize: 16, color: Colors.grey),
+                      style: TextStyle(fontSize: 15, color: Colors.grey),
                     ),
+                    const SizedBox(height: 16),
+                    
+                    // VOORTGANGSBALK & DOORSPOELEN (SLIDER)
+                    StreamBuilder<Duration>(
+                      stream: audioHandler.positionStream,
+                      builder: (context, snapshotPosition) {
+                        final position = snapshotPosition.data ?? Duration.zero;
+                        return StreamBuilder<Duration?>(
+                          stream: audioHandler.durationStream,
+                          builder: (context, snapshotDuration) {
+                            final duration = snapshotDuration.data ?? Duration.zero;
+                            
+                            double maxVal = duration.inMilliseconds.toDouble();
+                            double currentVal = position.inMilliseconds.toDouble();
+                            if (maxVal <= 0) maxVal = 1.0;
+                            if (currentVal > maxVal) currentVal = maxVal;
+
+                            return Column(
+                              children: [
+                                Slider(
+                                  min: 0.0,
+                                  max: maxVal,
+                                  value: currentVal,
+                                  activeColor: Colors.green,
+                                  inactiveColor: Colors.grey[700],
+                                  onChanged: (value) {
+                                    audioHandler.seek(Duration(milliseconds: value.toInt()));
+                                  },
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                      Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+                    
                     const Spacer(),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
