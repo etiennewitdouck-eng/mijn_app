@@ -21,16 +21,30 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Build iOS App without Xcode Archive restrictions
+      - name: Build Dart bundle for iOS
+        run: flutter build ios --release --no-pub --no-codesign --config-only
+
+      - name: Compile with xcodebuild (Bypass Provisioning Profile)
         run: |
-          # Compileert de app voor iOS-device zonder codesign en dwingt xcodebuild in te binden als losse app
-          flutter build ios --release --no-codesign --no-pub
+          cd ios
+          xcodebuild -workspace Runner.xcworkspace \
+                     -scheme Runner \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGN_STYLE=Manual \
+                     DSTROOT="$PWD/build/dst" \
+                     OBJROOT="$PWD/build/obj" \
+                     SYMROOT="$PWD/build/sym" \
+                     BUILD_DIR="$PWD/build"
 
       - name: Package IPA correctly
         run: |
           mkdir -p Payload
-          # Zoek de gebouwde app en kopieer deze naar de Payload map
-          find build/ios/iphoneos -name "*.app" -maxdepth 2 -exec cp -R {} Payload/ \;
+          # Zoek de gebouwde app in de xcodebuild output en kopieer deze
+          cp -R ios/build/Release-iphoneos/Runner.app Payload/
           zip -r Payload.ipa Payload
 
       - name: Upload IPA Artifact
