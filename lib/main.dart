@@ -31,7 +31,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
     
-    // Automatisch naar het volgende liedje gaan als de huidige afgelopen is
     _player.processingStateStream.listen((state) {
       if (state == ProcessingState.completed) {
         skipToNext();
@@ -74,7 +73,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> seek(Duration position) => _player.seek(position);
 
-  // Methode om een specifiek liedje direct te laden en te spelen met playlist-beheer
   Future<void> playSongAtIndex(int index, List<String> newPlaylist, Map<String, String> newImages) async {
     playlist = newPlaylist;
     localImagePaths = newImages;
@@ -109,14 +107,14 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> skipToNext() async {
     if (playlist.isEmpty) return;
-    currentIndex = (currentIndex + 1) % playlist.length; // Ga naar volgende, cirkel terug naar begin als je bij de laatste bent
+    currentIndex = (currentIndex + 1) % playlist.length;
     await playSongAtIndex(currentIndex, playlist, localImagePaths);
   }
 
   @override
   Future<void> skipToPrevious() async {
     if (playlist.isEmpty) return;
-    currentIndex = (currentIndex - 1 + playlist.length) % playlist.length; // Ga naar vorige, cirkel door naar achteren als je bij de eerste bent
+    currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
     await playSongAtIndex(currentIndex, playlist, localImagePaths);
   }
 }
@@ -164,7 +162,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       setState(() {
         _currentMediaItem = item;
         if (item != null) {
-          // Zoek de index op basis van het id (songPath)
           _currentIndex = _playlist.indexOf(item.id);
         }
       });
@@ -207,6 +204,109 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         _isLoading = false;
       });
     }
+  }
+
+  // Functie om het grote "Now Playing" scherm te openen
+  void _openNowPlayingModal() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.grey[900],
+      builder: (context) {
+        return FractionallySizedBox(
+          heightFactor: 0.85, // Vult 85% van het scherm
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Kleine sluit-streep bovenin
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[600],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Spacer(),
+                // Grote Albumhoes
+                if (_currentIndex != null && _localImagePaths[_playlist[_currentIndex!]] != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.file(
+                      File(_localImagePaths[_playlist[_currentIndex!]]!),
+                      width: 280,
+                      height: 280,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else
+                  Container(
+                    width: 280,
+                    height: 280,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Icon(Icons.music_note, size: 80, color: Colors.white),
+                  ),
+                const SizedBox(height: 32),
+                
+                // Titel van het nummer
+                Text(
+                  _currentMediaItem?.title ?? 'Geennummer',
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Onbekende Artiest',
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const Spacer(),
+
+                // Knoppenrij (Previous, Play/Pause, Next)
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.skip_previous),
+                      iconSize: 48,
+                      color: Colors.white,
+                      onPressed: () => audioHandler.skipToPrevious(),
+                    ),
+                    const SizedBox(width: 24),
+                    IconButton(
+                      icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                      iconSize: 72,
+                      color: Colors.green,
+                      onPressed: () async {
+                        if (_isPlaying) {
+                          await audioHandler.pause();
+                        } else {
+                          await audioHandler.play();
+                        }
+                      },
+                    ),
+                    const SizedBox(width: 24),
+                    IconButton(
+                      icon: const Icon(Icons.skip_next),
+                      iconSize: 48,
+                      color: Colors.white,
+                      onPressed: () => audioHandler.skipToNext(),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -255,73 +355,71 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   },
                 ),
       
-      // UITGEBREIDE SPELERBALK ONDERAAN MET PREVIOUS, PLAY/PAUSE EN NEXT
+      // ONDERSTE BALK: Klikbaar gemaakt met GestureDetector om de grote speler te openen
       bottomNavigationBar: _currentIndex != null
-          ? Container(
-              color: Colors.grey[900],
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                children: [
-                  // Albumhoes
-                  if (currentImagePath != null && File(currentImagePath).existsSync())
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: Image.file(
-                        File(currentImagePath),
+          ? GestureDetector(
+              onTap: _openNowPlayingModal,
+              child: Container(
+                color: Colors.grey[900],
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    if (currentImagePath != null && File(currentImagePath).existsSync())
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.file(
+                          File(currentImagePath),
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                        ),
+                      )
+                    else
+                      Container(
                         width: 50,
                         height: 50,
-                        fit: BoxFit.cover,
+                        color: Colors.grey[800],
+                        child: const Icon(Icons.music_note, color: Colors.white),
                       ),
-                    )
-                  else
-                    Container(
-                      width: 50,
-                      height: 50,
-                      color: Colors.grey[800],
-                      child: const Icon(Icons.music_note, color: Colors.white),
+                    const SizedBox(width: 10),
+                    
+                    Expanded(
+                      child: Text(
+                        _currentMediaItem?.title ?? '',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  const SizedBox(width: 10),
-                  
-                  // Titel
-                  Expanded(
-                    child: Text(
-                      _currentMediaItem?.title ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+
+                    IconButton(
+                      icon: const Icon(Icons.skip_previous),
+                      iconSize: 32,
+                      color: Colors.white,
+                      onPressed: () => audioHandler.skipToPrevious(),
                     ),
-                  ),
 
-                  // Vorige knop
-                  IconButton(
-                    icon: const Icon(Icons.skip_previous),
-                    iconSize: 32,
-                    color: Colors.white,
-                    onPressed: () => audioHandler.skipToPrevious(),
-                  ),
+                    IconButton(
+                      icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                      iconSize: 42,
+                      color: Colors.green,
+                      onPressed: () async {
+                        if (_isPlaying) {
+                          await audioHandler.pause();
+                        } else {
+                          await audioHandler.play();
+                        }
+                      },
+                    ),
 
-                  // Play / Pause knop
-                  IconButton(
-                    icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                    iconSize: 42,
-                    color: Colors.green,
-                    onPressed: () async {
-                      if (_isPlaying) {
-                        await audioHandler.pause();
-                      } else {
-                        await audioHandler.play();
-                      }
-                    },
-                  ),
-
-                  // Volgende knop
-                  IconButton(
-                    icon: const Icon(Icons.skip_next),
-                    iconSize: 32,
-                    color: Colors.white,
-                    onPressed: () => audioHandler.skipToNext(),
-                  ),
-                ],
+                    IconButton(
+                      icon: const Icon(Icons.skip_next),
+                      iconSize: 32,
+                      color: Colors.white,
+                      onPressed: () => audioHandler.skipToNext(),
+                    ),
+                  ],
+                ),
               ),
             )
           : null,
