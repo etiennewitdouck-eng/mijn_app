@@ -102,24 +102,26 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   Future<void> _playSong(int index) async {
     try {
       final songPath = _playlist[index];
-      
-      // Bepaal de bestandsnaam zonder extensie
       final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
       
-      // Check wat er in de map staat voor dit liedje
       final localImagePath = _localImagePaths[songPath];
-      debugPrint("DEBUG PLAY: Liedje = $songPath");
-      debugPrint("DEBUG PLAY: Gevonden lokaal pad in _localImagePaths = $localImagePath");
-
+      bool fileExists = false;
       if (localImagePath != null) {
-        final fileExists = await File(localImagePath).exists();
-        debugPrint("DEBUG PLAY: Bestaat het afbeeldingsbestand op de telefoon? -> $fileExists");
+        fileExists = await File(localImagePath).exists();
+      }
+
+      // Toon een melding op het scherm van je iPhone met de status!
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Pad: ${localImagePath != null ? "Ja" : "Nee"} | Bestaat: $fileExists'),
+            duration: const Duration(seconds: 4),
+          ),
+        );
       }
 
       final artUri = localImagePath != null ? Uri.file(localImagePath) : null;
-      debugPrint("DEBUG PLAY: Uiteindelijke artUri die naar MediaItem gaat = $artUri");
 
-      // Laad en speel het liedje af met metadata voor CarPlay
       await _audioPlayer.setAudioSource(
         AudioSource.asset(
           songPath,
