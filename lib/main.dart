@@ -106,9 +106,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       // Bepaal de bestandsnaam zonder extensie
       final baseName = songPath.split('/').last.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
       
-      // Haal het lokale bestandspad van de tijdelijke afbeelding op voor de poster/albumhoes
+      // Check wat er in de map staat voor dit liedje
       final localImagePath = _localImagePaths[songPath];
+      debugPrint("DEBUG PLAY: Liedje = $songPath");
+      debugPrint("DEBUG PLAY: Gevonden lokaal pad in _localImagePaths = $localImagePath");
+
+      if (localImagePath != null) {
+        final fileExists = await File(localImagePath).exists();
+        debugPrint("DEBUG PLAY: Bestaat het afbeeldingsbestand op de telefoon? -> $fileExists");
+      }
+
       final artUri = localImagePath != null ? Uri.file(localImagePath) : null;
+      debugPrint("DEBUG PLAY: Uiteindelijke artUri die naar MediaItem gaat = $artUri");
 
       // Laad en speel het liedje af met metadata voor CarPlay
       await _audioPlayer.setAudioSource(
@@ -119,7 +128,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             album: 'Mijn MP3 Map',
             title: baseName,
             artist: 'Onbekende Artiest',
-            // Gecorrigeerde Uri zodat CarPlay de poster netjes kan inladen
             artUri: artUri,
           ),
         ),
