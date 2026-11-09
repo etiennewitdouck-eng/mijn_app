@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:audiotags/audiotags.dart';
 
 late MyAudioHandler audioHandler;
 
@@ -98,11 +97,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
         artUri: artUri,
       );
 
-      if (song.isAsset) {
-        return AudioSource.asset(song.path, tag: mediaItemTag);
-      } else {
-        return AudioSource.file(song.path, tag: mediaItemTag);
-      }
+      return AudioSource.file(song.path, tag: mediaItemTag);
     }).toList();
 
     await _player.setAudioSource(ConcatenatingAudioSource(children: sources), initialIndex: currentIndex);
@@ -159,14 +154,12 @@ class SongItem {
   final String title;
   final String artist;
   final String? imagePath;
-  final bool isAsset;
 
   SongItem({
     required this.path,
     required this.title,
     required this.artist,
     this.imagePath,
-    required this.isAsset,
   });
 }
 
@@ -222,6 +215,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     });
   }
 
+  // Betrouwbare splitsing van artiest en titel op basis van "Artiest - Titel.mp3"
+  (String artist, String title) _parseSongName(String fileNameWithoutExt) {
+    String artist = 'Onbekende Artiest';
+    String title = fileNameWithoutExt;
+
+    final dashIndex = fileNameWithoutExt.indexOf('-');
+    if (dashIndex != -1) {
+      artist = fileNameWithoutExt.substring(0, dashIndex).trim();
+      title = fileNameWithoutExt.substring(dashIndex + 1).trim().replaceAll('-', ' ');
+    }
+    return (artist, title);
+  }
+
   Future<void> _loadSongs() async {
     try {
       List<SongItem> loadedSongs = [];
@@ -234,25 +240,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             final fileNameWithExt = entity.path.split('/').last;
             final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
             
-            String artist = 'Onbekende Artiest';
-            String title = baseName;
-
-            try {
-              // Aangepast naar AudioTags (met hoofdletter T)
-              final tag = await AudioTags.read(entity.path);
-              if (tag != null) {
-                if (tag.trackArtist != null && tag.trackArtist!.trim().isNotEmpty) {
-                  artist = tag.trackArtist!.trim();
-                } else if (tag.artist != null && tag.artist!.trim().isNotEmpty) {
-                  artist = tag.artist!.trim();
-                }
-                if (tag.title != null && tag.title!.trim().isNotEmpty) {
-                  title = tag.title!.trim();
-                }
-              }
-            } catch (e) {
-              debugPrint("Kon ID3 tags niet lezen voor ${entity.path}: $e");
-            }
+            final (artist, title) = _parseSongName(baseName);
 
             final potentialImage = File('${appDocDir.path}/$baseName.jpg');
             String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
@@ -262,7 +250,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               title: title,
               artist: artist,
               imagePath: imgPath,
-              isAsset: false,
             ));
           }
         }
@@ -476,7 +463,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final currentPath = _currentMediaItem?.id;
     final currentSong = audioHandler.playlist.firstWhere(
       (s) => s.path == currentPath,
-      orElse: () => SongItem(path: '', title: '', artist: '', isAsset: false),
+      orElse: () => SongItem(path: '', title: '', artist: ''),
     );
     final currentImagePath = currentSong.imagePath;
 
@@ -616,4 +603,3 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
-
