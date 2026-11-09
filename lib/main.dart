@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:audiotags/audiotags.dart'; // Toegevoegd voor ID3-tags
+import 'package:audiotags/audiotags.dart';
 
 late MyAudioHandler audioHandler;
 
@@ -227,7 +227,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       List<SongItem> loadedSongs = [];
       final appDocDir = await getApplicationDocumentsDirectory();
 
-      // 1. Scan de Documenten-map voor echte MP3-bestanden en lees ID3-tags uit
       try {
         final dirFiles = appDocDir.listSync();
         for (var entity in dirFiles) {
@@ -238,11 +237,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             String artist = 'Onbekende Artiest';
             String title = baseName;
 
-            // Probeer ID3-tags uit te lezen via de audiotags package
             try {
-              final tag = await Audiotags.readAudioTag(entity.path);
+              // Aangepast naar AudioTags (met hoofdletter T)
+              final tag = await AudioTags.read(entity.path);
               if (tag != null) {
-                if (tag.artist != null && tag.artist!.trim().isNotEmpty) {
+                if (tag.trackArtist != null && tag.trackArtist!.trim().isNotEmpty) {
+                  artist = tag.trackArtist!.trim();
+                } else if (tag.artist != null && tag.artist!.trim().isNotEmpty) {
                   artist = tag.artist!.trim();
                 }
                 if (tag.title != null && tag.title!.trim().isNotEmpty) {
@@ -253,7 +254,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               debugPrint("Kon ID3 tags niet lezen voor ${entity.path}: $e");
             }
 
-            // Check of er een bijbehorende .jpg in de map staat
             final potentialImage = File('${appDocDir.path}/$baseName.jpg');
             String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
@@ -430,7 +430,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 }
 
-// Volledig scherm voor "Now Playing"
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -617,3 +616,4 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
