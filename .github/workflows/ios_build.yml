@@ -24,9 +24,15 @@ jobs:
       - name: Install CocoaPods
         run: |
           cd ios
-          # Verwijder eventuele oude caches of ontbrekende locks
-          rm -rf Pods Podfile.lock
-          pod install     
+          pod install
+
+      - name: Verify Podfile.lock exists
+        run: |
+          ls -la ios/
+          if [ ! -f ios/Podfile.lock ]; then
+            echo "Error: Podfile.lock is missing!"
+            exit 1
+          fi
 
       - name: Build Dart bundle for iOS
         run: flutter build ios --release --no-pub --no-codesign --config-only
