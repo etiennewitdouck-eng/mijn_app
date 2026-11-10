@@ -21,17 +21,13 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Generate Flutter iOS config and files
+        run: flutter build ios --release --no-pub --no-codesign --config-only
+
       - name: Install CocoaPods
         run: |
           cd ios
           pod install
-          if [ -f Podfile.lock ]; then
-            cp Podfile.lock ./Podfile.lock
-            cp Podfile.lock ../Podfile.lock
-          fi
-
-      - name: Build Dart bundle for iOS
-        run: flutter build ios --release --no-pub --no-codesign --config-only
 
       - name: Compile with xcodebuild (Bypass Provisioning Profile)
         run: |
