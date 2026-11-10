@@ -36,7 +36,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   void _initCarPlay() {
-    // Gebruik de veilige instantie-aanroep voor v1.7.1
     final CPListSection section = CPListSection(
       items: [
         CPListItem(
@@ -54,7 +53,8 @@ class _MainScreenState extends State<MainScreen> {
       sections: [section],
     );
 
-    FlutterCarPlay.instance.setRootTemplate(
+    // Gebruik hier FLTCarPlay in plaats van FlutterCarPlay.instance
+    FLTCarPlay.setRootTemplate(
       rootTemplate: carPlayTemplate,
       animated: true,
     );
