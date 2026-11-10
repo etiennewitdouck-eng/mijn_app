@@ -26,12 +26,15 @@
     <string>$(FLUTTER_BUILD_NUMBER)</string>
     <key>LSRequiresIPhoneOS</key>
     <true/>
+    
+    <!-- Gecombineerd SceneManifest voor zowel de telefoon als CarPlay -->
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>
-        <false/>
+        <true/>
         <key>UISceneConfigurations</key>
         <dict>
+            <!-- Configuratie voor het telefoonscherm -->
             <key>UIWindowSceneSessionRoleApplication</key>
             <array>
                 <dict>
@@ -45,8 +48,20 @@
                     <string>Main</string>
                 </dict>
             </array>
+            
+            <!-- Configuratie voor het CarPlay autoscherm -->
+            <key>CPTemplateApplicationSceneSessionRoleApplication</key>
+            <array>
+                <dict>
+                    <key>UISceneConfigurationName</key>
+                    <string>CarPlay Configuration</string>
+                    <key>UISceneDelegateClassName</key>
+                    <string>flutter_carplay.FlutterCarPlaySceneDelegate</string>
+                </dict>
+            </array>
         </dict>
     </dict>
+
     <key>UIApplicationSupportsIndirectInputEvents</key>
     <true/>
     <key>UILaunchStoryboardName</key>

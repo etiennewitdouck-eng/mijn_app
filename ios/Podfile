@@ -1,0 +1,7 @@
+platform :ios, '14.0'
+use_frameworks!
+use_modular_headers!
+
+target 'Runner' do
+  # Flutter en plugins worden hier automatisch aan gekoppeld
+end
