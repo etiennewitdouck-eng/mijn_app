@@ -26,13 +26,6 @@ jobs:
           cd ios
           pod install
 
-      - name: Ensure Podfile.lock is in root and ios
-        run: |
-          # Zorg dat de Podfile.lock zowel in ios/ als in de root aanwezig is voor xcodebuild
-          if [ -f ios/Podfile.lock ]; then
-            cp ios/Podfile.lock ./Podfile.lock
-          fi
-
       - name: Build Dart bundle for iOS
         run: flutter build ios --release --no-pub --no-codesign --config-only
 
@@ -64,3 +57,4 @@ jobs:
         with:
           name: ios-app-build
           path: Payload.ipa
+          
