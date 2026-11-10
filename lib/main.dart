@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_carplay/flutter_carplay.dart';
+import 'package:flutter_carplay/flutter_carplay.io.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 
@@ -49,30 +49,21 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialiseer CarPlay zodra de app start
-    _initCarPlay();
-  }
-
-  void _initCarPlay() {
-    // Luister naar de CarPlay-verbinding met de auto
-    FlutterCarPlay.instance.addListener((onConnectionChange) {
-      if (onConnectionChange == CPConnectionStatus.connected) {
-        // Zodra verbonden met de Kia Ceed, tonen we het CarPlay-menu
-        _setupCarPlayRootTemplate();
-      }
-    });
+    // Initialiseer CarPlay direct bij het starten van het scherm
+    _setupCarPlayRootTemplate();
   }
 
   void _setupCarPlayRootTemplate() {
-    // Bouw de lijst met items voor het autoscherm
-    // Hier kun je later dynamisch je geladen MP3-nummers in stoppen
+    // Bouw de lijst met items voor het autoscherm van de Kia Ceed
     final CPListSection section = CPListSection(
       items: [
         CPListItem(
           text: 'Mijn Muzieklijst',
           detailText: 'Tik om nummers te bekijken',
-          onPress: (complete) {
+          onPress: (complete, self) {
             // Actie wanneer er op het autoscherm geklikt wordt
+            debugPrint("CarPlay item geklikt!");
+            // Belangrijk: roep altijd complete() aan om de laadstaat te stoppen
             complete();
           },
         ),
@@ -84,7 +75,8 @@ class _MainScreenState extends State<MainScreen> {
       sections: [section],
     );
 
-    FlutterCarPlay.instance.setRootTemplate(
+    // Stel de root template in via de juiste FLTCarPlay interface
+    FLTCarPlay.setRootTemplate(
       rootTemplate: carPlayTemplate,
       animated: true,
     );
