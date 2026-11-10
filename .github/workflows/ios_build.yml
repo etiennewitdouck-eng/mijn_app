@@ -24,7 +24,8 @@ jobs:
       - name: Install CocoaPods
         run: |
           cd ios
-          pod install
+          pod repo update
+          pod install --repo-update
 
       - name: Build Dart bundle for iOS
         run: flutter build ios --release --no-pub --no-codesign --config-only
