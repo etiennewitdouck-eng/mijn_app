@@ -26,6 +26,7 @@ jobs:
           cd ios
           pod install
           if [ -f Podfile.lock ]; then
+            cp Podfile.lock ./Podfile.lock
             cp Podfile.lock ../Podfile.lock
           fi
 
