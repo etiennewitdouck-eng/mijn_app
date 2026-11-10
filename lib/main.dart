@@ -3,9 +3,39 @@ import 'package:flutter_carplay/flutter_carplay.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 
+// Maak een globale of lokaal te beheren controller aan voor v1.7.1
+final carplay = FlutterCarplay();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Bereid CarPlay voor bij de start van de app
+  prepareCarPlayHome();
+  
   runApp(const MyApp());
+}
+
+Future<void> prepareCarPlayHome() async {
+  carplay.setRootTemplate(
+    rootTemplate: CPListTemplate(
+      title: 'MP3 Player',
+      sections: [
+        CPListSection(
+          items: [
+            CPListItem(
+              text: 'Mijn Muzieklijst',
+              detailText: 'Tik om nummers te bekijken',
+              onPress: (complete, self) async {
+                // Roep altijd complete() aan als de actie klaar is
+                await complete();
+              },
+            ),
+          ],
+        ),
+      ],
+    ),
+    animated: true,
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -29,37 +59,6 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  @override
-  void initState() {
-    super.initState();
-    _initCarPlay();
-  }
-
-  void _initCarPlay() {
-    final CPListSection section = CPListSection(
-      items: [
-        CPListItem(
-          text: 'Mijn Muzieklijst',
-          detailText: 'Tik om nummers te bekijken',
-          onPress: (complete, self) {
-            complete();
-          },
-        ),
-      ],
-    );
-
-    final CPListTemplate carPlayTemplate = CPListTemplate(
-      title: 'MP3 Player',
-      sections: [section],
-    );
-
-    // Gebruik hier FLTCarPlay in plaats van FlutterCarPlay.instance
-    FLTCarPlay.setRootTemplate(
-      rootTemplate: carPlayTemplate,
-      animated: true,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
