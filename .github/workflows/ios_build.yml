@@ -26,12 +26,11 @@ jobs:
           cd ios
           pod install
 
-      - name: Verify Podfile.lock exists
+      - name: Ensure Podfile.lock is in root and ios
         run: |
-          ls -la ios/
-          if [ ! -f ios/Podfile.lock ]; then
-            echo "Error: Podfile.lock is missing!"
-            exit 1
+          # Zorg dat de Podfile.lock zowel in ios/ als in de root aanwezig is voor xcodebuild
+          if [ -f ios/Podfile.lock ]; then
+            cp ios/Podfile.lock ./Podfile.lock
           fi
 
       - name: Build Dart bundle for iOS
