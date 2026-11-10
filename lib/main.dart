@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_carplay/flutter_carplay.io.dart';
+import 'package:flutter_carplay/flutter_carplay.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 
@@ -15,28 +15,11 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MP3 Player CarPlay',
-      theme: ThemeData(primarySwatch: BlueThemeColor),
+      theme: ThemeData(primarySwatch: Colors.blue),
       home: const MainScreen(),
     );
   }
 }
-
-// Een eenvoudige kleurdefinitie om fouten te voorkomen
-const MaterialColor BlueThemeColor = MaterialColor(
-  0xFF2196F3,
-  <int, Color>{
-    50: Color(0xFFE3F2FD),
-    100: Color(0xFFBBDEFB),
-    200: Color(0xFF90CAF9),
-    300: Color(0xFF64B5F6),
-    400: Color(0xFF42A5F5),
-    500: Color(0xFF2196F3),
-    600: Color(0xFF1E88E5),
-    700: Color(0xFF1976D2),
-    800: Color(0xFF1565C0),
-    900: Color(0xFF0D47A1),
-  },
-);
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -49,21 +32,17 @@ class _MainScreenState extends State<MainScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialiseer CarPlay direct bij het starten van het scherm
-    _setupCarPlayRootTemplate();
+    _initCarPlay();
   }
 
-  void _setupCarPlayRootTemplate() {
-    // Bouw de lijst met items voor het autoscherm van de Kia Ceed
+  void _initCarPlay() {
+    // Gebruik de veilige instantie-aanroep voor v1.7.1
     final CPListSection section = CPListSection(
       items: [
         CPListItem(
           text: 'Mijn Muzieklijst',
           detailText: 'Tik om nummers te bekijken',
           onPress: (complete, self) {
-            // Actie wanneer er op het autoscherm geklikt wordt
-            debugPrint("CarPlay item geklikt!");
-            // Belangrijk: roep altijd complete() aan om de laadstaat te stoppen
             complete();
           },
         ),
@@ -75,8 +54,7 @@ class _MainScreenState extends State<MainScreen> {
       sections: [section],
     );
 
-    // Stel de root template in via de juiste FLTCarPlay interface
-    FLTCarPlay.setRootTemplate(
+    FlutterCarPlay.instance.setRootTemplate(
       rootTemplate: carPlayTemplate,
       animated: true,
     );
@@ -103,7 +81,7 @@ class _MainScreenState extends State<MainScreen> {
               ),
               SizedBox(height: 12),
               Text(
-                'Verbind je iPhone met de Kia Ceed. Het CarPlay-scherm laadt automatisch de muziekinterface.',
+                'Verbind je iPhone met de Kia Ceed.',
                 style: TextStyle(fontSize: 16, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
