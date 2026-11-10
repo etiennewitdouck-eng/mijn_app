@@ -3,20 +3,11 @@ import 'package:flutter_carplay/flutter_carplay.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 
-// Maak een globale of lokaal te beheren controller aan voor v1.7.1
-final carplay = FlutterCarplay();
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Bereid CarPlay voor bij de start van de app
-  prepareCarPlayHome();
-  
-  runApp(const MyApp());
-}
-
-Future<void> prepareCarPlayHome() async {
-  carplay.setRootTemplate(
+  // Directe statische aanroep voor v1.7.1
+  FlutterCarPlay.setRootTemplate(
     rootTemplate: CPListTemplate(
       title: 'MP3 Player',
       sections: [
@@ -26,8 +17,7 @@ Future<void> prepareCarPlayHome() async {
               text: 'Mijn Muzieklijst',
               detailText: 'Tik om nummers te bekijken',
               onPress: (complete, self) async {
-                // Roep altijd complete() aan als de actie klaar is
-                await complete();
+                complete();
               },
             ),
           ],
@@ -36,6 +26,8 @@ Future<void> prepareCarPlayHome() async {
     ),
     animated: true,
   );
+
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
