@@ -347,7 +347,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     }
   }
 
-  // CarPlay: Als je op een map drukt, starten direct alle nummers uit die map in de speler
   void _updateCarPlayTemplate() {
     if (_folders.isEmpty) return;
 
@@ -359,7 +358,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         text: folderName,
         detailText: '${songsInFolder.length} nummers (Tik om af te spelen)',
         onPress: (complete, self) async {
-          // Zet direct de hele map klaar als afspeellijst en start bij het eerste nummer
           final allSongs = _folders.values.expand((x) => x).toList();
           final firstSongInFolderIndex = allSongs.indexWhere((s) => s.path == songsInFolder.first.path);
           
@@ -447,6 +445,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
                         return ListTile(
                           contentPadding: const EdgeInsets.only(left: 32, right: 16),
+                          leading: song.imagePath != null && File(song.imagePath!).existsSync()
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: Image.file(File(song.imagePath!), width: 40, height: 40, fit: BoxFit.cover),
+                                )
+                              : const Icon(Icons.music_note, size: 30),
                           title: Text(
                             song.title,
                             style: TextStyle(
