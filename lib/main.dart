@@ -292,7 +292,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       for (var entity in entities) {
         if (entity is Directory) {
           final folderName = entity.path.split('/').last;
-          if (folderName.startsWith('.')) continue; // Sla verborgen mappen over
+          if (folderName.startsWith('.')) continue;
 
           List<SongItem> folderSongs = [];
           try {
@@ -347,7 +347,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     }
   }
 
-  // CarPlay: Toon mappen in het hoofdscherm, klik om naar liedjes van die map te gaan
+  // CarPlay: Als je op een map drukt, starten direct alle nummers uit die map in de speler
   void _updateCarPlayTemplate() {
     if (_folders.isEmpty) return;
 
@@ -357,38 +357,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
       return CPListItem(
         text: folderName,
-        detailText: '${songsInFolder.length} nummers',
-        accessoryType: CPListItemAccessoryType.disclosureIndicator,
-        onPress: (complete, self) {
-          // Maak een template voor de nummers binnen deze map
-          final List<CPListItem> songItems = songsInFolder.asMap().entries.map((songEntry) {
-            final index = songEntry.key;
-            final song = songEntry.value;
-
-            return CPListItem(
-              text: song.title,
-              detailText: song.artist,
-              onPress: (songComplete, songSelf) async {
-                // Vind de globale index in de totale playlist
-                final globalPlaylist = _folders.values.expand((x) => x).toList();
-                final globalIndex = globalPlaylist.indexWhere((s) => s.path == song.path);
-                if (globalIndex != -1) {
-                  await audioHandler.setPlaylist(globalPlaylist, globalIndex);
-                }
-                songComplete();
-              },
-            );
-          }).toList();
-
-          // Open een sub-scherm in CarPlay met de liedjes van deze map
-          FlutterCarplay.pushTemplate(
-            template: CPListTemplate(
-              title: folderName,
-              sections: [CPListSection(items: songItems)],
-            ),
-            animated: true,
-          );
-
+        detailText: '${songsInFolder.length} nummers (Tik om af te spelen)',
+        onPress: (complete, self) async {
+          // Zet direct de hele map klaar als afspeellijst en start bij het eerste nummer
+          final allSongs = _folders.values.expand((x) => x).toList();
+          final firstSongInFolderIndex = allSongs.indexWhere((s) => s.path == songsInFolder.first.path);
+          
+          if (firstSongInFolderIndex != -1) {
+            await audioHandler.setPlaylist(allSongs, firstSongInFolderIndex);
+          }
           complete();
         },
       );
@@ -617,7 +594,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   @override
   Widget build(BuildContext context) {
     final currentPath = _currentMediaItem?.id;
-    final currentSong = audioHandler.playlist.firstWhere(
+    final allSongs = audioHandler.playlist;
+    final currentSong = allSongs.firstWhere(
       (s) => s.path == currentPath,
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
@@ -658,7 +636,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   color: Colors.grey[800],
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.music_note, size: 80, color: BoxFit.none.toString().contains('none') ? Colors.white : Colors.white),
+                child: const Icon(Icons.music_note, size: 80, color: Colors.white),
               ),
             const SizedBox(height: 32),
             Text(
@@ -759,4 +737,3 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
-
