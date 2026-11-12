@@ -132,7 +132,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     await _player.play();
   }
 
-  // Specifiek afspelen en shufflen van één enkele map
   Future<void> playFolderShuffled(List<SongItem> folderSongs) async {
     List<SongItem> shuffled = List.from(folderSongs);
     shuffled.shuffle(Random());
@@ -728,7 +727,40 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               },
             ),
             
-            ...
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.skip_previous),
+                  iconSize: 48,
+                  color: Colors.white,
+                  onPressed: () => audioHandler.skipToPrevious(),
+                ),
+                const SizedBox(width: 24),
+                IconButton(
+                  icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                  iconSize: 72,
+                  color: Colors.green,
+                  onPressed: () async {
+                    if (_isPlaying) {
+                      await audioHandler.pause();
+                    } else {
+                      await audioHandler.play();
+                    }
+                    setState(() {});
+                  },
+                ),
+                const SizedBox(width: 24),
+                IconButton(
+                  icon: const Icon(Icons.skip_next),
+                  iconSize: 48,
+                  color: Colors.white,
+                  onPressed: () => audioHandler.skipToNext(),
+                ),
+              ],
+            ),
+            const Spacer(),
           ],
         ),
       ),
