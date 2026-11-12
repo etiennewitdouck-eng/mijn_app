@@ -138,6 +138,11 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     await setPlaylist(shuffled, 0);
   }
 
+  // Herstel naar de originele volgorde van de map of alle nummers
+  Future<void> restoreOriginalOrder(List<SongItem> originalSongs, {int initialIndex = 0}) async {
+    await setPlaylist(originalSongs, initialIndex, keepOriginalOrder: true);
+  }
+
   Future<void> toggleShuffle() async {
     isShuffled = !isShuffled;
     
@@ -249,7 +254,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   int? _currentIndex;
   bool _isPlaying = false;
   bool _isShuffled = false;
-  String? _activeShuffledFolder; // Houdt bij welke map momenteel geshuffled is afgespeeld
+  String? _activeShuffledFolder; // Houdt bij welke map momenteel geshuffled is
   MediaItem? _currentMediaItem;
 
   @override
@@ -462,13 +467,22 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               size: 20,
                               color: isThisFolderShuffled ? Colors.green : Colors.grey,
                             ),
-                            tooltip: 'Shuffle alleen deze map',
-                            onPressed: () {
-                              audioHandler.playFolderShuffled(songs);
-                              setState(() {
-                                _activeShuffledFolder = folderName;
-                                _isShuffled = false; // Schakel algemene shuffle uit
-                              });
+                            tooltip: isThisFolderShuffled ? 'Zet map shuffle uit' : 'Shuffle alleen deze map',
+                            onPressed: () async {
+                              if (isThisFolderShuffled) {
+                                // Als hij al aan stond: zet uit en herstel gesorteerde volgorde van de map
+                                setState(() {
+                                  _activeShuffledFolder = null;
+                                });
+                                await audioHandler.restoreOriginalOrder(songs);
+                              } else {
+                                // Als hij uit stond: aanzetten en shufflen
+                                await audioHandler.playFolderShuffled(songs);
+                                setState(() {
+                                  _activeShuffledFolder = folderName;
+                                  _isShuffled = false; // Schakel algemene shuffle uit
+                                });
+                              }
                             },
                           ),
                         ],
