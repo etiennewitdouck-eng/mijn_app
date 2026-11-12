@@ -135,7 +135,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> playFolderShuffled(List<SongItem> folderSongs) async {
     List<SongItem> shuffled = List.from(folderSongs);
     shuffled.shuffle(Random());
-    isShuffled = true;
     await setPlaylist(shuffled, 0);
   }
 
@@ -250,6 +249,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   int? _currentIndex;
   bool _isPlaying = false;
   bool _isShuffled = false;
+  String? _activeShuffledFolder; // Houdt bij welke map momenteel geshuffled is afgespeeld
   MediaItem? _currentMediaItem;
 
   @override
@@ -393,6 +393,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     await audioHandler.toggleShuffle();
     setState(() {
       _isShuffled = audioHandler.isShuffled;
+      if (_isShuffled) {
+        _activeShuffledFolder = null; // Algemene shuffle zet map-shuffle uit
+      }
     });
   }
 
@@ -441,6 +444,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   itemBuilder: (context, index) {
                     final folderName = _folders.keys.elementAt(index);
                     final songs = _folders[folderName]!;
+                    final isThisFolderShuffled = _activeShuffledFolder == folderName;
 
                     return ExpansionTile(
                       leading: const Icon(Icons.folder, color: Colors.amber),
@@ -453,12 +457,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.shuffle, size: 20, color: Colors.grey),
+                            icon: Icon(
+                              Icons.shuffle,
+                              size: 20,
+                              color: isThisFolderShuffled ? Colors.green : Colors.grey,
+                            ),
                             tooltip: 'Shuffle alleen deze map',
                             onPressed: () {
                               audioHandler.playFolderShuffled(songs);
                               setState(() {
-                                _isShuffled = audioHandler.isShuffled;
+                                _activeShuffledFolder = folderName;
+                                _isShuffled = false; // Schakel algemene shuffle uit
                               });
                             },
                           ),
@@ -766,5 +775,4 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       ),
     );
   }
-  
 }
