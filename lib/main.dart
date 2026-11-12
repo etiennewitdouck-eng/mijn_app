@@ -132,6 +132,14 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     await _player.play();
   }
 
+  // Specifiek afspelen en shufflen van één enkele map
+  Future<void> playFolderShuffled(List<SongItem> folderSongs) async {
+    List<SongItem> shuffled = List.from(folderSongs);
+    shuffled.shuffle(Random());
+    isShuffled = true;
+    await setPlaylist(shuffled, 0);
+  }
+
   Future<void> toggleShuffle() async {
     isShuffled = !isShuffled;
     
@@ -416,7 +424,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               color: _isShuffled ? Colors.green : Colors.white,
             ),
             onPressed: _toggleShuffle,
-            tooltip: _isShuffled ? 'Shuffle aan' : 'Shuffle uit',
+            tooltip: 'Algemene Shuffle (alle mappen)',
           ),
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -437,7 +445,26 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
                     return ExpansionTile(
                       leading: const Icon(Icons.folder, color: Colors.amber),
-                      title: Text(folderName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              folderName,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.shuffle, size: 20, color: Colors.grey),
+                            tooltip: 'Shuffle alleen deze map',
+                            onPressed: () {
+                              audioHandler.playFolderShuffled(songs);
+                              setState(() {
+                                _isShuffled = audioHandler.isShuffled;
+                              });
+                            },
+                          ),
+                        ],
+                      ),
                       subtitle: Text('${songs.length} nummers', style: const TextStyle(color: Colors.grey, fontSize: 12)),
                       children: songs.map((song) {
                         final globalIndex = allSongs.indexWhere((s) => s.path == song.path);
@@ -701,40 +728,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               },
             ),
             
-            const Spacer(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.skip_previous),
-                  iconSize: 48,
-                  color: Colors.white,
-                  onPressed: () => audioHandler.skipToPrevious(),
-                ),
-                const SizedBox(width: 24),
-                IconButton(
-                  icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                  iconSize: 72,
-                  color: Colors.green,
-                  onPressed: () async {
-                    if (_isPlaying) {
-                      await audioHandler.pause();
-                    } else {
-                      await audioHandler.play();
-                    }
-                    setState(() {});
-                  },
-                ),
-                const SizedBox(width: 24),
-                IconButton(
-                  icon: const Icon(Icons.skip_next),
-                  iconSize: 48,
-                  color: Colors.white,
-                  onPressed: () => audioHandler.skipToNext(),
-                ),
-              ],
-            ),
-            const Spacer(),
+            ...
           ],
         ),
       ),
