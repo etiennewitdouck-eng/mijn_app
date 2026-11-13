@@ -325,11 +325,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 
                 final (artist, title) = _parseSongName(baseName);
                 
-                // Zoek naar bijbehorende afbeelding (.jpg)
                 final potentialImage = File('${entity.path}/$baseName.jpg');
                 String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
-                // Zoek naar bijbehorende ondertiteling (.vtt)
                 final potentialVtt = File('${entity.path}/$baseName.vtt');
                 String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
 
@@ -691,22 +689,18 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       }
 
       if (line.contains("-->")) {
-        // Dit is een tijdregel: 00:00:10.000 --> 00:00:15.000
         final parts = line.split("-->");
         start = _parseDuration(parts[0].trim());
-        end = _parseDuration(parts[1].trim().split(" ").first); // Negeer eventuele instellingen achter de tijd
+        end = _parseDuration(parts[1].trim().split(" ").first);
         textBuffer = "";
       } else {
         if (start != null && end != null) {
           if (textBuffer.isNotEmpty) textBuffer += "\n";
           textBuffer += line;
           
-          // Voeg toe of update de sub
-          // We checken of de sub al bestaat, zo niet toevoegen
           if (!subs.any((s) => s.start == start)) {
             subs.add(SubtitleItem(start: start!, end: end!, text: textBuffer));
           } else {
-            // Update tekst als er meerdere regels zijn
             subs.last = SubtitleItem(start: start, end: end, text: textBuffer);
           }
         }
@@ -717,7 +711,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   Duration _parseDuration(String timeStr) {
     try {
-      // Formaat kan 00:00:10.000 of 00:10.000 zijn
       final parts = timeStr.split(':');
       if (parts.length == 3) {
         final hours = int.parse(parts[0]);
@@ -807,16 +800,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             ),
             const SizedBox(height: 16),
 
-            // ** VTT Ondertiteling / Songtekst Box **
+            // ** VTT Ondertiteling / Songtekst Box (Flexibel gemaakt voor landscape) **
             Container(
-              height: 60,
+              constraints: const BoxConstraints(minHeight: 40, maxHeight: 80),
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: StreamBuilder<Duration>(
                 stream: audioHandler.positionStream,
                 builder: (context, snapshot) {
                   final position = snapshot.data ?? Duration.zero;
-                  // Zoek de actieve ondertitel op basis van de huidige tijd
                   final activeSub = _subtitles.firstWhere(
                     (sub) => position >= sub.start && position <= sub.end,
                     orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
@@ -922,3 +914,4 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
