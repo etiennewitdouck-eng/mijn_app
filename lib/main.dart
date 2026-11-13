@@ -766,52 +766,58 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ** LANDSCAPE LAYOUT: Grote foto links, rechts knoppen met titel/artiest daaronder **
+            // ** LANDSCAPE LAYOUT: Maximale foto links, alle info/knoppen rechts **
             if (isLandscape) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Grotere afbeelding links (180x180)
-                  if (currentImagePath != null && File(currentImagePath).existsSync())
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(currentImagePath),
-                        width: 180,
-                        height: 180,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  else
-                    Container(
-                      width: 180,
-                      height: 180,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.music_note, size: 60, color: Colors.white),
-                    ),
-                  const SizedBox(width: 20),
-                  
-                  // Rechter kolom: Knoppen bovenaan, Titel & Artiest daaronder
+                  // Maximale albumcover links (gebruikt flexabele Expanded)
                   Expanded(
+                    flex: 4,
+                    child: Center(
+                      child: currentImagePath != null && File(currentImagePath).existsSync()
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                File(currentImagePath),
+                                width: 210,
+                                height: 210,
+                                fit: BoxFit.cover,
+                              ),
+                            )
+                          : Container(
+                              width: 210,
+                              height: 210,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[800],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.music_note, size: 70, color: Colors.white),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  
+                  // Rechter kolom: Knoppen, Titel/Artiest, VTT Ondertiteling én Voortgangsbalk
+                  Expanded(
+                    flex: 5,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
+                        // Knoppen bovenaan rechts
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.skip_previous),
-                              iconSize: 42,
+                              iconSize: 36,
                               color: Colors.white,
                               onPressed: () => audioHandler.skipToPrevious(),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 4),
                             IconButton(
                               icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                              iconSize: 64,
+                              iconSize: 52,
                               color: Colors.green,
                               onPressed: () async {
                                 if (_isPlaying) {
@@ -822,19 +828,21 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 setState(() {});
                               },
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 4),
                             IconButton(
                               icon: const Icon(Icons.skip_next),
-                              iconSize: 42,
+                              iconSize: 36,
                               color: Colors.white,
                               onPressed: () => audioHandler.skipToNext(),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
+
+                        // Titel & Artiest
                         Text(
                           _currentMediaItem?.title ?? '',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -842,10 +850,85 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         const SizedBox(height: 2),
                         Text(
                           _currentMediaItem?.artist ?? 'Onbekende Artiest',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          style: const TextStyle(fontSize: 11, color: Colors.grey),
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+
+                        // VTT Ondertiteling / Songtekst Box
+                        Container(
+                          constraints: const BoxConstraints(minHeight: 25, maxHeight: 50),
+                          alignment: Alignment.center,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: StreamBuilder<Duration>(
+                            stream: audioHandler.positionStream,
+                            builder: (context, snapshot) {
+                              final position = snapshot.data ?? Duration.zero;
+                              final activeSub = _subtitles.firstWhere(
+                                (sub) => position >= sub.start && position <= sub.end,
+                                orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
+                              );
+
+                              return Text(
+                                activeSub.text,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.greenAccent,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+
+                        // Voortgangsbalk (Slider) rechts onderaan
+                        StreamBuilder<Duration>(
+                          stream: audioHandler.positionStream,
+                          builder: (context, snapshotPosition) {
+                            final position = snapshotPosition.data ?? Duration.zero;
+                            return StreamBuilder<Duration?>(
+                              stream: audioHandler.durationStream,
+                              builder: (context, snapshotDuration) {
+                                final duration = snapshotDuration.data ?? Duration.zero;
+                                
+                                double maxVal = duration.inMilliseconds.toDouble();
+                                double currentVal = position.inMilliseconds.toDouble();
+                                if (maxVal <= 0) maxVal = 1.0;
+                                if (currentVal > maxVal) currentVal = maxVal;
+
+                                return Column(
+                                  children: [
+                                    Slider(
+                                      min: 0.0,
+                                      max: maxVal,
+                                      value: currentVal,
+                                      activeColor: Colors.green,
+                                      inactiveColor: Colors.grey[700],
+                                      onChanged: (value) {
+                                        audioHandler.seek(Duration(milliseconds: value.toInt()));
+                                      },
+                                    ),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                                          Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
                         ),
                       ],
                     ),
@@ -853,7 +936,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ],
               ),
             ] else ...[
-              // ** PORTRAIT LAYOUT: Standaard onder elkaar **
+              // ** PORTRAIT LAYOUT: Standaard onder elkaar (verticaal) **
               if (currentImagePath != null && File(currentImagePath).existsSync())
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
@@ -888,87 +971,86 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 style: const TextStyle(fontSize: 14, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
-            ],
 
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-            // ** VTT Ondertiteling / Songtekst Box **
-            Container(
-              constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-              child: StreamBuilder<Duration>(
+              // ** VTT Ondertiteling / Songtekst Box **
+              Container(
+                constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                child: StreamBuilder<Duration>(
+                  stream: audioHandler.positionStream,
+                  builder: (context, snapshot) {
+                    final position = snapshot.data ?? Duration.zero;
+                    final activeSub = _subtitles.firstWhere(
+                      (sub) => position >= sub.start && position <= sub.end,
+                      orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
+                    );
+
+                    return Text(
+                      activeSub.text,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.greenAccent,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 8),
+              
+              StreamBuilder<Duration>(
                 stream: audioHandler.positionStream,
-                builder: (context, snapshot) {
-                  final position = snapshot.data ?? Duration.zero;
-                  final activeSub = _subtitles.firstWhere(
-                    (sub) => position >= sub.start && position <= sub.end,
-                    orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
-                  );
+                builder: (context, snapshotPosition) {
+                  final position = snapshotPosition.data ?? Duration.zero;
+                  return StreamBuilder<Duration?>(
+                    stream: audioHandler.durationStream,
+                    builder: (context, snapshotDuration) {
+                      final duration = snapshotDuration.data ?? Duration.zero;
+                      
+                      double maxVal = duration.inMilliseconds.toDouble();
+                      double currentVal = position.inMilliseconds.toDouble();
+                      if (maxVal <= 0) maxVal = 1.0;
+                      if (currentVal > maxVal) currentVal = maxVal;
 
-                  return Text(
-                    activeSub.text,
-                    style: TextStyle(
-                      fontSize: isLandscape ? 14 : 16,
-                      color: Colors.greenAccent,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                      return Column(
+                        children: [
+                          Slider(
+                            min: 0.0,
+                            max: maxVal,
+                            value: currentVal,
+                            activeColor: Colors.green,
+                            inactiveColor: Colors.grey[700],
+                            onChanged: (value) {
+                              audioHandler.seek(Duration(milliseconds: value.toInt()));
+                            },
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                                Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
               ),
-            ),
-
-            const SizedBox(height: 8),
-            
-            StreamBuilder<Duration>(
-              stream: audioHandler.positionStream,
-              builder: (context, snapshotPosition) {
-                final position = snapshotPosition.data ?? Duration.zero;
-                return StreamBuilder<Duration?>(
-                  stream: audioHandler.durationStream,
-                  builder: (context, snapshotDuration) {
-                    final duration = snapshotDuration.data ?? Duration.zero;
-                    
-                    double maxVal = duration.inMilliseconds.toDouble();
-                    double currentVal = position.inMilliseconds.toDouble();
-                    if (maxVal <= 0) maxVal = 1.0;
-                    if (currentVal > maxVal) currentVal = maxVal;
-
-                    return Column(
-                      children: [
-                        Slider(
-                          min: 0.0,
-                          max: maxVal,
-                          value: currentVal,
-                          activeColor: Colors.green,
-                          inactiveColor: Colors.grey[700],
-                          onChanged: (value) {
-                            audioHandler.seek(Duration(milliseconds: value.toInt()));
-                          },
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                              Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
-              },
-            ),
-            
-            // Alleen knoppen onderaan tonen in portrait (in landscape staan ze al naast de foto)
-            if (!isLandscape) ...[
+              
               const SizedBox(height: 16),
+              
+              // Knoppen onderaan in portrait
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
