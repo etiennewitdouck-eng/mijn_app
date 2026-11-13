@@ -766,80 +766,91 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ** LANDSCAPE LAYOUT: Foto links, knoppen ernaast **
+            // ** LANDSCAPE LAYOUT: Grote foto links, rechts knoppen met titel/artiest daaronder **
             if (isLandscape) ...[
               Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Grotere afbeelding (160x160)
+                  // Grotere afbeelding links (180x180)
                   if (currentImagePath != null && File(currentImagePath).existsSync())
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: Image.file(
                         File(currentImagePath),
-                        width: 150,
-                        height: 150,
+                        width: 180,
+                        height: 180,
                         fit: BoxFit.cover,
                       ),
                     )
                   else
                     Container(
-                      width: 150,
-                      height: 150,
+                      width: 180,
+                      height: 180,
                       decoration: BoxDecoration(
                         color: Colors.grey[800],
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.music_note, size: 50, color: Colors.white),
+                      child: const Icon(Icons.music_note, size: 60, color: Colors.white),
                     ),
-                  const SizedBox(width: 24),
+                  const SizedBox(width: 20),
                   
-                  // Knoppen ernaast
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.skip_previous),
-                        iconSize: 42,
-                        color: Colors.white,
-                        onPressed: () => audioHandler.skipToPrevious(),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                        iconSize: 64,
-                        color: Colors.green,
-                        onPressed: () async {
-                          if (_isPlaying) {
-                            await audioHandler.pause();
-                          } else {
-                            await audioHandler.play();
-                          }
-                          setState(() {});
-                        },
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.skip_next),
-                        iconSize: 42,
-                        color: Colors.white,
-                        onPressed: () => audioHandler.skipToNext(),
-                      ),
-                    ],
+                  // Rechter kolom: Knoppen bovenaan, Titel & Artiest daaronder
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.skip_previous),
+                              iconSize: 42,
+                              color: Colors.white,
+                              onPressed: () => audioHandler.skipToPrevious(),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                              iconSize: 64,
+                              color: Colors.green,
+                              onPressed: () async {
+                                if (_isPlaying) {
+                                  await audioHandler.pause();
+                                } else {
+                                  await audioHandler.play();
+                                }
+                                setState(() {});
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.skip_next),
+                              iconSize: 42,
+                              color: Colors.white,
+                              onPressed: () => audioHandler.skipToNext(),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _currentMediaItem?.title ?? '',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _currentMediaItem?.artist ?? 'Onbekende Artiest',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _currentMediaItem?.title ?? '',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                _currentMediaItem?.artist ?? 'Onbekende Artiest',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                textAlign: TextAlign.center,
               ),
             ] else ...[
               // ** PORTRAIT LAYOUT: Standaard onder elkaar **
