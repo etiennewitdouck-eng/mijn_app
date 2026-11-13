@@ -44,6 +44,14 @@ void main() async {
   runApp(const MyApp());
 }
 
+class SubtitleItem {
+  final Duration start;
+  final Duration end;
+  final String text;
+
+  SubtitleItem({required this.start, required this.end, required this.text});
+}
+
 class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   final AudioPlayer _player = AudioPlayer();
   List<SongItem> playlist = [];
@@ -138,7 +146,6 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
     await setPlaylist(shuffled, 0);
   }
 
-  // Herstel naar de originele volgorde van de map of alle nummers
   Future<void> restoreOriginalOrder(List<SongItem> originalSongs, {int initialIndex = 0}) async {
     await setPlaylist(originalSongs, initialIndex, keepOriginalOrder: true);
   }
@@ -217,6 +224,7 @@ class SongItem {
   final String title;
   final String artist;
   final String? imagePath;
+  final String? vttPath;
   final String folderName;
 
   SongItem({
@@ -224,6 +232,7 @@ class SongItem {
     required this.title,
     required this.artist,
     this.imagePath,
+    this.vttPath,
     required this.folderName,
   });
 }
@@ -254,7 +263,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   int? _currentIndex;
   bool _isPlaying = false;
   bool _isShuffled = false;
-  String? _activeShuffledFolder; // Houdt bij welke map momenteel geshuffled is
+  String? _activeShuffledFolder;
   MediaItem? _currentMediaItem;
 
   @override
@@ -315,14 +324,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
                 
                 final (artist, title) = _parseSongName(baseName);
+                
+                // Zoek naar bijbehorende afbeelding (.jpg)
                 final potentialImage = File('${entity.path}/$baseName.jpg');
                 String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
+
+                // Zoek naar bijbehorende ondertiteling (.vtt)
+                final potentialVtt = File('${entity.path}/$baseName.vtt');
+                String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
 
                 folderSongs.add(SongItem(
                   path: subEntity.path,
                   title: title,
                   artist: artist,
                   imagePath: imgPath,
+                  vttPath: vttPath,
                   folderName: folderName,
                 ));
               }
@@ -399,7 +415,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     setState(() {
       _isShuffled = audioHandler.isShuffled;
       if (_isShuffled) {
-        _activeShuffledFolder = null; // Algemene shuffle zet map-shuffle uit
+        _activeShuffledFolder = null;
       }
     });
   }
@@ -470,17 +486,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                             tooltip: isThisFolderShuffled ? 'Zet map shuffle uit' : 'Shuffle alleen deze map',
                             onPressed: () async {
                               if (isThisFolderShuffled) {
-                                // Als hij al aan stond: zet uit en herstel gesorteerde volgorde van de map
                                 setState(() {
                                   _activeShuffledFolder = null;
                                 });
                                 await audioHandler.restoreOriginalOrder(songs);
                               } else {
-                                // Als hij uit stond: aanzetten en shufflen
                                 await audioHandler.playFolderShuffled(songs);
                                 setState(() {
                                   _activeShuffledFolder = folderName;
-                                  _isShuffled = false; // Schakel algemene shuffle uit
+                                  _isShuffled = false;
                                 });
                               }
                             },
@@ -613,12 +627,14 @@ class NowPlayingScreen extends StatefulWidget {
 class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _isPlaying = false;
   MediaItem? _currentMediaItem;
+  List<SubtitleItem> _subtitles = [];
 
   @override
   void initState() {
     super.initState();
     _isPlaying = audioHandler._player.playing;
     _currentMediaItem = audioHandler.mediaItem.value;
+    _loadSubtitles();
 
     audioHandler.playbackState.listen((state) {
       if (mounted) {
@@ -632,9 +648,93 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       if (mounted) {
         setState(() {
           _currentMediaItem = item;
+          _loadSubtitles();
         });
       }
     });
+  }
+
+  void _loadSubtitles() {
+    _subtitles = [];
+    final currentPath = _currentMediaItem?.id;
+    if (currentPath == null) return;
+
+    final allSongs = audioHandler.playlist;
+    final currentSong = allSongs.firstWhere(
+      (s) => s.path == currentPath,
+      orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
+    );
+
+    if (currentSong.vttPath != null) {
+      final file = File(currentSong.vttPath!);
+      if (file.existsSync()) {
+        try {
+          final lines = file.readAsLinesSync();
+          _subtitles = _parseVtt(lines);
+        } catch (e) {
+          debugPrint("Fout bij inlezen VTT: $e");
+        }
+      }
+    }
+  }
+
+  List<SubtitleItem> _parseVtt(List<String> lines) {
+    List<SubtitleItem> subs = [];
+    Duration? start;
+    Duration? end;
+    String textBuffer = "";
+
+    for (var line in lines) {
+      line = line.trim();
+      if (line.isEmpty || line.toUpperCase() == "WEBVTT" || line.startsWith("NOTE")) {
+        continue;
+      }
+
+      if (line.contains("-->")) {
+        // Dit is een tijdregel: 00:00:10.000 --> 00:00:15.000
+        final parts = line.split("-->");
+        start = _parseDuration(parts[0].trim());
+        end = _parseDuration(parts[1].trim().split(" ").first); // Negeer eventuele instellingen achter de tijd
+        textBuffer = "";
+      } else {
+        if (start != null && end != null) {
+          if (textBuffer.isNotEmpty) textBuffer += "\n";
+          textBuffer += line;
+          
+          // Voeg toe of update de sub
+          // We checken of de sub al bestaat, zo niet toevoegen
+          if (!subs.any((s) => s.start == start)) {
+            subs.add(SubtitleItem(start: start!, end: end!, text: textBuffer));
+          } else {
+            // Update tekst als er meerdere regels zijn
+            subs.last = SubtitleItem(start: start, end: end, text: textBuffer);
+          }
+        }
+      }
+    }
+    return subs;
+  }
+
+  Duration _parseDuration(String timeStr) {
+    try {
+      // Formaat kan 00:00:10.000 of 00:10.000 zijn
+      final parts = timeStr.split(':');
+      if (parts.length == 3) {
+        final hours = int.parse(parts[0]);
+        final minutes = int.parse(parts[1]);
+        final secParts = parts[2].split('.');
+        final seconds = int.parse(secParts[0]);
+        final milliseconds = secParts.length > 1 ? int.parse(secParts[1].padRight(3, '0').substring(0, 3)) : 0;
+        return Duration(hours: hours, minutes: minutes, seconds: seconds, milliseconds: milliseconds);
+      } else if (parts.length == 2) {
+        final minutes = int.parse(parts[0]);
+        final secParts = parts[1].split('.');
+        final seconds = int.parse(secParts[0]);
+        final milliseconds = secParts.length > 1 ? int.parse(secParts[1].padRight(3, '0').substring(0, 3)) : 0;
+        return Duration(minutes: minutes, seconds: seconds, milliseconds: milliseconds);
+      }
+    } catch (_) {}
+    return Duration.zero;
   }
 
   String _formatDuration(Duration duration) {
@@ -676,36 +776,68 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 borderRadius: BorderRadius.circular(16),
                 child: Image.file(
                   File(currentImagePath),
-                  width: 280,
-                  height: 280,
+                  width: 200,
+                  height: 200,
                   fit: BoxFit.cover,
                 ),
               )
             else
               Container(
-                width: 280,
-                height: 280,
+                width: 200,
+                height: 200,
                 decoration: BoxDecoration(
                   color: Colors.grey[800],
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.music_note, size: 80, color: Colors.white),
+                child: const Icon(Icons.music_note, size: 60, color: Colors.white),
               ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
             Text(
               _currentMediaItem?.title ?? '',
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
               _currentMediaItem?.artist ?? 'Onbekende Artiest',
-              style: const TextStyle(fontSize: 16, color: Colors.grey),
+              style: const TextStyle(fontSize: 14, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+
+            // ** VTT Ondertiteling / Songtekst Box **
+            Container(
+              height: 60,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: StreamBuilder<Duration>(
+                stream: audioHandler.positionStream,
+                builder: (context, snapshot) {
+                  final position = snapshot.data ?? Duration.zero;
+                  // Zoek de actieve ondertitel op basis van de huidige tijd
+                  final activeSub = _subtitles.firstWhere(
+                    (sub) => position >= sub.start && position <= sub.end,
+                    orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
+                  );
+
+                  return Text(
+                    activeSub.text,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      color: Colors.greenAccent,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: 16),
             
             StreamBuilder<Duration>(
               stream: audioHandler.positionStream,
