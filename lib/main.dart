@@ -747,6 +747,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
     final currentImagePath = currentSong.imagePath;
 
+    // Controleer of de telefoon horizontaal (landscape) staat
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+    final double imageSize = isLandscape ? 110.0 : 200.0;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -758,53 +762,52 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: isLandscape ? 8.0 : 16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Spacer(),
             if (currentImagePath != null && File(currentImagePath).existsSync())
               ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
                 child: Image.file(
                   File(currentImagePath),
-                  width: 200,
-                  height: 200,
+                  width: imageSize,
+                  height: imageSize,
                   fit: BoxFit.cover,
                 ),
               )
             else
               Container(
-                width: 200,
-                height: 200,
+                width: imageSize,
+                height: imageSize,
                 decoration: BoxDecoration(
                   color: Colors.grey[800],
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.music_note, size: 60, color: Colors.white),
+                child: Icon(Icons.music_note, size: isLandscape ? 50 : 60, color: Colors.white),
               ),
-            const SizedBox(height: 16),
+            SizedBox(height: isLandscape ? 8 : 16),
             Text(
               _currentMediaItem?.title ?? '',
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: isLandscape ? 16 : 20, fontWeight: FontWeight.bold),
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(
               _currentMediaItem?.artist ?? 'Onbekende Artiest',
-              style: const TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: isLandscape ? 12 : 14, color: Colors.grey),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isLandscape ? 6 : 16),
 
-            // ** VTT Ondertiteling / Songtekst Box (Flexibel gemaakt voor landscape) **
+            // ** VTT Ondertiteling / Songtekst Box **
             Container(
-              constraints: const BoxConstraints(minHeight: 40, maxHeight: 80),
+              constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
               alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
               child: StreamBuilder<Duration>(
                 stream: audioHandler.positionStream,
                 builder: (context, snapshot) {
@@ -816,8 +819,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
                   return Text(
                     activeSub.text,
-                    style: const TextStyle(
-                      fontSize: 16,
+                    style: TextStyle(
+                      fontSize: isLandscape ? 13 : 16,
                       color: Colors.greenAccent,
                       fontWeight: FontWeight.w500,
                     ),
@@ -829,7 +832,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            SizedBox(height: isLandscape ? 4 : 16),
             
             StreamBuilder<Duration>(
               stream: audioHandler.positionStream,
@@ -862,8 +865,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                              Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                              Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                              Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 11)),
                             ],
                           ),
                         ),
@@ -874,20 +877,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               },
             ),
             
-            const Spacer(),
+            SizedBox(height: isLandscape ? 4 : 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
                   icon: const Icon(Icons.skip_previous),
-                  iconSize: 48,
+                  iconSize: isLandscape ? 36 : 48,
                   color: Colors.white,
                   onPressed: () => audioHandler.skipToPrevious(),
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 20),
                 IconButton(
                   icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                  iconSize: 72,
+                  iconSize: isLandscape ? 56 : 72,
                   color: Colors.green,
                   onPressed: () async {
                     if (_isPlaying) {
@@ -898,21 +901,18 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     setState(() {});
                   },
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 20),
                 IconButton(
                   icon: const Icon(Icons.skip_next),
-                  iconSize: 48,
+                  iconSize: isLandscape ? 36 : 48,
                   color: Colors.white,
                   onPressed: () => audioHandler.skipToNext(),
                 ),
               ],
             ),
-            const Spacer(),
           ],
         ),
       ),
     );
   }
-  
 }
-
