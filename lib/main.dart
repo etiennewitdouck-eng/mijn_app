@@ -749,7 +749,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
     // Controleer of de telefoon horizontaal (landscape) staat
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-    final double imageSize = isLandscape ? 110.0 : 200.0;
 
     return Scaffold(
       appBar: AppBar(
@@ -763,45 +762,124 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: isLandscape ? 8.0 : 16.0),
+        padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: isLandscape ? 4.0 : 16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (currentImagePath != null && File(currentImagePath).existsSync())
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(currentImagePath),
-                  width: imageSize,
-                  height: imageSize,
-                  fit: BoxFit.cover,
-                ),
-              )
-            else
-              Container(
-                width: imageSize,
-                height: imageSize,
-                decoration: BoxDecoration(
-                  color: Colors.grey[800],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(Icons.music_note, size: isLandscape ? 50 : 60, color: Colors.white),
+            // ** LANDSCAPE LAYOUT: Foto links, knoppen ernaast **
+            if (isLandscape) ...[
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Grotere afbeelding (160x160)
+                  if (currentImagePath != null && File(currentImagePath).existsSync())
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.file(
+                        File(currentImagePath),
+                        width: 150,
+                        height: 150,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  else
+                    Container(
+                      width: 150,
+                      height: 150,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.music_note, size: 50, color: Colors.white),
+                    ),
+                  const SizedBox(width: 24),
+                  
+                  // Knoppen ernaast
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.skip_previous),
+                        iconSize: 42,
+                        color: Colors.white,
+                        onPressed: () => audioHandler.skipToPrevious(),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                        iconSize: 64,
+                        color: Colors.green,
+                        onPressed: () async {
+                          if (_isPlaying) {
+                            await audioHandler.pause();
+                          } else {
+                            await audioHandler.play();
+                          }
+                          setState(() {});
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.skip_next),
+                        iconSize: 42,
+                        color: Colors.white,
+                        onPressed: () => audioHandler.skipToNext(),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            SizedBox(height: isLandscape ? 8 : 16),
-            Text(
-              _currentMediaItem?.title ?? '',
-              style: TextStyle(fontSize: isLandscape ? 16 : 20, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              _currentMediaItem?.artist ?? 'Onbekende Artiest',
-              style: TextStyle(fontSize: isLandscape ? 12 : 14, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: isLandscape ? 6 : 16),
+              const SizedBox(height: 8),
+              Text(
+                _currentMediaItem?.title ?? '',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                _currentMediaItem?.artist ?? 'Onbekende Artiest',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ] else ...[
+              // ** PORTRAIT LAYOUT: Standaard onder elkaar **
+              if (currentImagePath != null && File(currentImagePath).existsSync())
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.file(
+                    File(currentImagePath),
+                    width: 200,
+                    height: 200,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              else
+                Container(
+                  width: 200,
+                  height: 200,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Icon(Icons.music_note, size: 60, color: Colors.white),
+                ),
+              const SizedBox(height: 16),
+              Text(
+                _currentMediaItem?.title ?? '',
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _currentMediaItem?.artist ?? 'Onbekende Artiest',
+                style: const TextStyle(fontSize: 14, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+            ],
+
+            const SizedBox(height: 12),
 
             // ** VTT Ondertiteling / Songtekst Box **
             Container(
@@ -820,7 +898,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   return Text(
                     activeSub.text,
                     style: TextStyle(
-                      fontSize: isLandscape ? 13 : 16,
+                      fontSize: isLandscape ? 14 : 16,
                       color: Colors.greenAccent,
                       fontWeight: FontWeight.w500,
                     ),
@@ -832,7 +910,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               ),
             ),
 
-            SizedBox(height: isLandscape ? 4 : 16),
+            const SizedBox(height: 8),
             
             StreamBuilder<Duration>(
               stream: audioHandler.positionStream,
@@ -877,39 +955,42 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               },
             ),
             
-            SizedBox(height: isLandscape ? 4 : 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.skip_previous),
-                  iconSize: isLandscape ? 36 : 48,
-                  color: Colors.white,
-                  onPressed: () => audioHandler.skipToPrevious(),
-                ),
-                const SizedBox(width: 20),
-                IconButton(
-                  icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                  iconSize: isLandscape ? 56 : 72,
-                  color: Colors.green,
-                  onPressed: () async {
-                    if (_isPlaying) {
-                      await audioHandler.pause();
-                    } else {
-                      await audioHandler.play();
-                    }
-                    setState(() {});
-                  },
-                ),
-                const SizedBox(width: 20),
-                IconButton(
-                  icon: const Icon(Icons.skip_next),
-                  iconSize: isLandscape ? 36 : 48,
-                  color: Colors.white,
-                  onPressed: () => audioHandler.skipToNext(),
-                ),
-              ],
-            ),
+            // Alleen knoppen onderaan tonen in portrait (in landscape staan ze al naast de foto)
+            if (!isLandscape) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.skip_previous),
+                    iconSize: 48,
+                    color: Colors.white,
+                    onPressed: () => audioHandler.skipToPrevious(),
+                  ),
+                  const SizedBox(width: 24),
+                  IconButton(
+                    icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                    iconSize: 72,
+                    color: Colors.green,
+                    onPressed: () async {
+                      if (_isPlaying) {
+                        await audioHandler.pause();
+                      } else {
+                        await audioHandler.play();
+                      }
+                      setState(() {});
+                    },
+                  ),
+                  const SizedBox(width: 24),
+                  IconButton(
+                    icon: const Icon(Icons.skip_next),
+                    iconSize: 48,
+                    color: Colors.white,
+                    onPressed: () => audioHandler.skipToNext(),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
