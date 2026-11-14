@@ -225,7 +225,7 @@ class SongItem {
   final String artist;
   final String? imagePath;
   final String? vttPath;
-  final String? vttNlPath; // Extra VTT voor Nederlandse vertaling
+  final String? vttNlPath;
   final String folderName;
 
   SongItem({
@@ -333,7 +333,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final potentialVtt = File('${entity.path}/$baseName.vtt');
                 String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
 
-                // Controleer op een tweede .nl.vtt bestand
                 final potentialVttNl = File('${entity.path}/$baseName.nl.vtt');
                 String? vttNlPath = potentialVttNl.existsSync() ? potentialVttNl.path : null;
 
@@ -700,7 +699,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   MediaItem? _currentMediaItem;
   List<SubtitleItem> _subtitles = [];
   List<SubtitleItem> _subtitlesNl = [];
-  bool _showNlSubtitles = false; // Bepaalt of we de Nederlandse vertaling tonen
+  bool _showNlSubtitles = false;
 
   @override
   void initState() {
@@ -739,7 +738,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
 
-    // Laad standaard VTT
     if (currentSong.vttPath != null) {
       final file = File(currentSong.vttPath!);
       if (file.existsSync()) {
@@ -752,7 +750,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       }
     }
 
-    // Laad optionele Nederlandse VTT
     if (currentSong.vttNlPath != null) {
       final fileNl = File(currentSong.vttNlPath!);
       if (fileNl.existsSync()) {
@@ -836,7 +833,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
     final currentImagePath = currentSong.imagePath;
-    final hasNlSubtitle = currentSong.vttNlPath != null;
+    
+    // Controleer of er überhaupt een vtt-bestand is
+    final hasAnySubtitle = currentSong.vttPath != null || currentSong.vttNlPath != null;
+    // Controleer of er TWEE bestanden zijn om te kunnen schakelen
+    final hasBothSubtitles = currentSong.vttPath != null && currentSong.vttNlPath != null;
 
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
@@ -851,8 +852,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
         actions: [
-          // ** Knop om te schakelen naar Nederlandse vertaling (alleen zichtbaar als .nl.vtt bestaat) **
-          if (hasNlSubtitle)
+          // ** Schakelknop verschijnt ALLEEN als er 2 vtt-bestanden zijn **
+          if (hasBothSubtitles)
             Padding(
               padding: const EdgeInsets.only(right: 12.0),
               child: TextButton.icon(
@@ -972,35 +973,37 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 6),
 
-                        // ** VTT Ondertiteling Box (Wisselt op basis van _showNlSubtitles) **
-                        Container(
-                          constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
-                          alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: StreamBuilder<Duration>(
-                            stream: audioHandler.positionStream,
-                            builder: (context, snapshot) {
-                              final position = snapshot.data ?? Duration.zero;
-                              final activeList = _showNlSubtitles ? _subtitlesNl : _subtitles;
-                              final activeSub = activeList.firstWhere(
-                                (sub) => position >= sub.start && position <= sub.end,
-                                orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
-                              );
+                        // ** Toon ondertiteling als er EEN of TWEE bestanden zijn **
+                        if (hasAnySubtitle)
+                          Container(
+                            constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: StreamBuilder<Duration>(
+                              stream: audioHandler.positionStream,
+                              builder: (context, snapshot) {
+                                final position = snapshot.data ?? Duration.zero;
+                                // Als er gekozen is voor NL en NL bestaat, toon NL. Anders het origineel (of fallback naar NL als origineel ontbreekt).
+                                final activeList = (_showNlSubtitles && _subtitlesNl.isNotEmpty) ? _subtitlesNl : (_subtitles.isNotEmpty ? _subtitles : _subtitlesNl);
+                                final activeSub = activeList.firstWhere(
+                                  (sub) => position >= sub.start && position <= sub.end,
+                                  orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
+                                );
 
-                              return Text(
-                                activeSub.text,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.greenAccent,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                                textAlign: TextAlign.center,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              );
-                            },
+                                return Text(
+                                  activeSub.text,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.greenAccent,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                );
+                              },
+                            ),
                           ),
-                        ),
                         const SizedBox(height: 2),
 
                         StreamBuilder<Duration>(
@@ -1095,35 +1098,36 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
               const SizedBox(height: 12),
 
-              // ** VTT Ondertiteling Box in Portrait **
-              Container(
-                constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
-                alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                child: StreamBuilder<Duration>(
-                  stream: audioHandler.positionStream,
-                  builder: (context, snapshot) {
-                    final position = snapshot.data ?? Duration.zero;
-                    final activeList = _showNlSubtitles ? _subtitlesNl : _subtitles;
-                    final activeSub = activeList.firstWhere(
-                      (sub) => position >= sub.start && position <= sub.end,
-                      orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
-                    );
+              // ** Toon ondertiteling als er EEN of TWEE bestanden zijn in Portrait **
+              if (hasAnySubtitle)
+                Container(
+                  constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+                  child: StreamBuilder<Duration>(
+                    stream: audioHandler.positionStream,
+                    builder: (context, snapshot) {
+                      final position = snapshot.data ?? Duration.zero;
+                      final activeList = (_showNlSubtitles && _subtitlesNl.isNotEmpty) ? _subtitlesNl : (_subtitles.isNotEmpty ? _subtitles : _subtitlesNl);
+                      final activeSub = activeList.firstWhere(
+                        (sub) => position >= sub.start && position <= sub.end,
+                        orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
+                      );
 
-                    return Text(
-                      activeSub.text,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.greenAccent,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    );
-                  },
+                      return Text(
+                        activeSub.text,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      );
+                    },
+                  ),
                 ),
-              ),
 
               const SizedBox(height: 8),
               
