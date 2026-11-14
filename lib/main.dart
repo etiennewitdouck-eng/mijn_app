@@ -201,7 +201,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> skipToNext() async {
     if (_player.hasNext) {
-      await _player.seekToNext();
+      await _player.skipToNext();
     } else {
       await _player.seek(Duration.zero, index: 0);
     }
@@ -211,7 +211,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> skipToPrevious() async {
     if (_player.hasPrevious) {
-      await _player.seekToPrevious();
+      await _player.skipToPrevious();
     } else {
       await _player.seek(Duration.zero, index: playlist.length - 1);
     }
@@ -615,58 +615,60 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 }
 
-// ** Echte Multi-band Spectrum Analyzer (Equalizer Balkjes van links naar rechts) **
-class SpectrumVisualizer extends StatefulWidget {
+// ** Spectrum Analyzer gekoppeld aan de werkelijke audio positionStream **
+class SpectrumVisualizer extends StatelessWidget {
   final bool isPlaying;
-  const SpectrumVisualizer({super.key, required this.isPlaying});
+  final Stream<Duration> positionStream;
 
-  @override
-  State<SpectrumVisualizer> createState() => _SpectrumVisualizerState();
-}
-
-class _SpectrumVisualizerState extends State<SpectrumVisualizer> with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  final int barCount = 16; // Aantal losse frequentie-balkjes
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 600),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  const SpectrumVisualizer({
+    super.key,
+    required this.isPlaying,
+    required this.positionStream,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 32,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          return Row(
+    const int barCount = 16;
+
+    if (!isPlaying) {
+      return SizedBox(
+        height: 32,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(barCount, (index) => Container(
+            width: 4,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.grey[700],
+              borderRadius: BorderRadius.circular(2),
+            ),
+          )),
+        ),
+      );
+    }
+
+    return StreamBuilder<Duration>(
+      stream: positionStream,
+      builder: (context, snapshot) {
+        final positionMs = (snapshot.data ?? Duration.zero).inMilliseconds.toDouble();
+
+        return SizedBox(
+          height: 32,
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: List.generate(barCount, (index) {
-              double height = 4.0;
-              if (widget.isPlaying) {
-                // Simuleer frequenties: links (bas) beweegt zwaarder, rechts (hoog) sneller/fijner
-                final seed = index * 0.4;
-                final wave = sin((_controller.value * 2 * pi) + seed);
-                final randomJitter = (index % 3 == 0) ? cos(_controller.value * 4 * pi + index) : 0.5;
-                
-                // Bass op links krijgt meer hoogte
-                final multiplier = (index < 5) ? 22.0 : (index < 11 ? 18.0 : 14.0);
-                height = 6.0 + ((wave.abs() * 0.7 + randomJitter.abs() * 0.3) * multiplier);
-              }
+              // Genereer op basis van de werkelijke afspeeltijd (positionMs) unieke bewegingen per balkje
+              // Zo reageert het direct op de loop van het nummer en stopt het direct bij pauze/zoeken
+              final timeFactor = positionMs / 180.0;
+              final wave = sin(timeFactor + (index * 0.4));
+              final cosWave = cos(timeFactor * 0.7 + (index * 0.3));
               
-              // Kleurverloop van groen (bas) naar groengeel/helder (treble)
+              // Bas op links krijgt meer hoogte, treble op rechts beweegt sneller
+              final multiplier = (index < 5) ? 24.0 : (index < 11 ? 18.0 : 12.0);
+              final height = 6.0 + ((wave.abs() * 0.6 + cosWave.abs() * 0.4) * multiplier);
+
               return Container(
                 width: 4,
                 height: height,
@@ -676,9 +678,9 @@ class _SpectrumVisualizerState extends State<SpectrumVisualizer> with SingleTick
                 ),
               );
             }),
-          );
-        },
-      ),
+          ),
+        );
+      },
     );
   }
 }
@@ -834,7 +836,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ** LANDSCAPE LAYOUT: Foto nog breder (flex 6), controls rechts (flex 5) **
+            // ** LANDSCAPE LAYOUT: Maximale albumcover links (flex 6), controls rechts (flex 5) **
             if (isLandscape) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -848,14 +850,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               borderRadius: BorderRadius.circular(14),
                               child: Image.file(
                                 File(currentImagePath),
-                                width: 280,
-                                height: 280,
+                                width: 300,
+                                height: 300,
                                 fit: BoxFit.cover,
                               ),
                             )
                           : Container(
-                              width: 280,
-                              height: 280,
+                              width: 300,
+                              height: 300,
                               decoration: BoxDecoration(
                                 color: Colors.grey[800],
                                 borderRadius: BorderRadius.circular(14),
@@ -907,8 +909,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 4),
 
-                        // Echte Spectrum Analyzer / Balkjes Equalizer
-                        SpectrumVisualizer(isPlaying: _isPlaying),
+                        // Gekoppelde Spectrum Analyzer
+                        SpectrumVisualizer(
+                          isPlaying: _isPlaying,
+                          positionStream: audioHandler.positionStream,
+                        ),
                         const SizedBox(height: 4),
 
                         // Titel & Artiest
@@ -1031,8 +1036,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ),
               const SizedBox(height: 14),
 
-              // Spectrum Analyzer in Portrait
-              SpectrumVisualizer(isPlaying: _isPlaying),
+              // Gekoppelde Spectrum Analyzer in Portrait
+              SpectrumVisualizer(
+                isPlaying: _isPlaying,
+                positionStream: audioHandler.positionStream,
+              ),
               const SizedBox(height: 14),
 
               Text(
@@ -1167,5 +1175,3 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
-
-
