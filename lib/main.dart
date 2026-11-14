@@ -225,6 +225,7 @@ class SongItem {
   final String artist;
   final String? imagePath;
   final String? vttPath;
+  final String? vttNlPath; // Extra VTT voor Nederlandse vertaling
   final String folderName;
 
   SongItem({
@@ -233,6 +234,7 @@ class SongItem {
     required this.artist,
     this.imagePath,
     this.vttPath,
+    this.vttNlPath,
     required this.folderName,
   });
 }
@@ -331,12 +333,17 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final potentialVtt = File('${entity.path}/$baseName.vtt');
                 String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
 
+                // Controleer op een tweede .nl.vtt bestand
+                final potentialVttNl = File('${entity.path}/$baseName.nl.vtt');
+                String? vttNlPath = potentialVttNl.existsSync() ? potentialVttNl.path : null;
+
                 folderSongs.add(SongItem(
                   path: subEntity.path,
                   title: title,
                   artist: artist,
                   imagePath: imgPath,
                   vttPath: vttPath,
+                  vttNlPath: vttNlPath,
                   folderName: folderName,
                 ));
               }
@@ -692,6 +699,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _isPlaying = false;
   MediaItem? _currentMediaItem;
   List<SubtitleItem> _subtitles = [];
+  List<SubtitleItem> _subtitlesNl = [];
+  bool _showNlSubtitles = false; // Bepaalt of we de Nederlandse vertaling tonen
 
   @override
   void initState() {
@@ -720,6 +729,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   void _loadSubtitles() {
     _subtitles = [];
+    _subtitlesNl = [];
     final currentPath = _currentMediaItem?.id;
     if (currentPath == null) return;
 
@@ -729,6 +739,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
 
+    // Laad standaard VTT
     if (currentSong.vttPath != null) {
       final file = File(currentSong.vttPath!);
       if (file.existsSync()) {
@@ -737,6 +748,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           _subtitles = _parseVtt(lines);
         } catch (e) {
           debugPrint("Fout bij inlezen VTT: $e");
+        }
+      }
+    }
+
+    // Laad optionele Nederlandse VTT
+    if (currentSong.vttNlPath != null) {
+      final fileNl = File(currentSong.vttNlPath!);
+      if (fileNl.existsSync()) {
+        try {
+          final linesNl = fileNl.readAsLinesSync();
+          _subtitlesNl = _parseVtt(linesNl);
+        } catch (e) {
+          debugPrint("Fout bij inlezen NL VTT: $e");
         }
       }
     }
@@ -812,6 +836,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
     final currentImagePath = currentSong.imagePath;
+    final hasNlSubtitle = currentSong.vttNlPath != null;
 
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
@@ -825,6 +850,30 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         ),
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
+        actions: [
+          // ** Knop om te schakelen naar Nederlandse vertaling (alleen zichtbaar als .nl.vtt bestaat) **
+          if (hasNlSubtitle)
+            Padding(
+              padding: const EdgeInsets.only(right: 12.0),
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  backgroundColor: _showNlSubtitles ? Colors.green : Colors.grey[800],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                ),
+                icon: const Icon(Icons.translate, size: 16),
+                label: Text(
+                  _showNlSubtitles ? 'NL' : 'Origineel',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _showNlSubtitles = !_showNlSubtitles;
+                  });
+                },
+              ),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: isLandscape ? 4.0 : 16.0),
@@ -923,6 +972,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 6),
 
+                        // ** VTT Ondertiteling Box (Wisselt op basis van _showNlSubtitles) **
                         Container(
                           constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
                           alignment: Alignment.center,
@@ -931,7 +981,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             stream: audioHandler.positionStream,
                             builder: (context, snapshot) {
                               final position = snapshot.data ?? Duration.zero;
-                              final activeSub = _subtitles.firstWhere(
+                              final activeList = _showNlSubtitles ? _subtitlesNl : _subtitles;
+                              final activeSub = activeList.firstWhere(
                                 (sub) => position >= sub.start && position <= sub.end,
                                 orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
                               );
@@ -1044,6 +1095,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
               const SizedBox(height: 12),
 
+              // ** VTT Ondertiteling Box in Portrait **
               Container(
                 constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
                 alignment: Alignment.center,
@@ -1052,7 +1104,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   stream: audioHandler.positionStream,
                   builder: (context, snapshot) {
                     final position = snapshot.data ?? Duration.zero;
-                    final activeSub = _subtitles.firstWhere(
+                    final activeList = _showNlSubtitles ? _subtitlesNl : _subtitles;
+                    final activeSub = activeList.firstWhere(
                       (sub) => position >= sub.start && position <= sub.end,
                       orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
                     );
@@ -1158,4 +1211,3 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
-
