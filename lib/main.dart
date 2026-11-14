@@ -615,6 +615,80 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 }
 
+// ** Equalizer / Waveform Animated Widget **
+class EqualizerBars extends StatefulWidget {
+  final bool isPlaying;
+  const EqualizerBars({super.key, required this.isPlaying});
+
+  @override
+  State<EqualizerBars> createState() => _EqualizerBarsState();
+}
+
+class _EqualizerBarsState extends State<EqualizerBars> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.isPlaying) {
+      return SizedBox(
+        height: 18,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(6, (index) => Container(
+            width: 3,
+            height: 4,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: Colors.grey,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          )),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 18,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(7, (index) {
+              final val = sin((_controller.value * 2 * pi) + (index * 0.7)).abs();
+              final height = 4.0 + (val * 14.0);
+              return Container(
+                width: 3,
+                height: height,
+                margin: const EdgeInsets.symmetric(horizontal: 2),
+                decoration: BoxDecoration(
+                  color: Colors.greenAccent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              );
+            }),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class NowPlayingScreen extends StatefulWidget {
   const NowPlayingScreen({super.key});
 
@@ -766,12 +840,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ** LANDSCAPE LAYOUT: Maximale foto links, alle info/knoppen rechts **
+            // ** LANDSCAPE LAYOUT: Maximale foto links, alle info/knoppen/wave rechts **
             if (isLandscape) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Maximale albumcover links (gebruikt flexabele Expanded)
+                  // Maximale albumcover links
                   Expanded(
                     flex: 4,
                     child: Center(
@@ -780,14 +854,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               borderRadius: BorderRadius.circular(12),
                               child: Image.file(
                                 File(currentImagePath),
-                                width: 210,
-                                height: 210,
+                                width: 220,
+                                height: 220,
                                 fit: BoxFit.cover,
                               ),
                             )
                           : Container(
-                              width: 210,
-                              height: 210,
+                              width: 220,
+                              height: 220,
                               decoration: BoxDecoration(
                                 color: Colors.grey[800],
                                 borderRadius: BorderRadius.circular(12),
@@ -798,7 +872,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   ),
                   const SizedBox(width: 16),
                   
-                  // Rechter kolom: Knoppen, Titel/Artiest, VTT Ondertiteling én Voortgangsbalk
+                  // Rechter kolom: Knoppen, golfvoorstelling, Titel/Artiest, VTT Ondertiteling én Voortgangsbalk
                   Expanded(
                     flex: 5,
                     child: Column(
@@ -837,7 +911,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 4),
+
+                        // ** Waveform / Equalizer voorstelling tussen knoppen en titel **
+                        EqualizerBars(isPlaying: _isPlaying),
+                        const SizedBox(height: 4),
 
                         // Titel & Artiest
                         Text(
@@ -855,11 +933,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
 
                         // VTT Ondertiteling / Songtekst Box
                         Container(
-                          constraints: const BoxConstraints(minHeight: 25, maxHeight: 50),
+                          constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
                           alignment: Alignment.center,
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           child: StreamBuilder<Duration>(
@@ -885,7 +963,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             },
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 2),
 
                         // Voortgangsbalk (Slider) rechts onderaan
                         StreamBuilder<Duration>(
@@ -942,22 +1020,27 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   borderRadius: BorderRadius.circular(16),
                   child: Image.file(
                     File(currentImagePath),
-                    width: 200,
-                    height: 200,
+                    width: 190,
+                    height: 190,
                     fit: BoxFit.cover,
                   ),
                 )
               else
                 Container(
-                  width: 200,
-                  height: 200,
+                  width: 190,
+                  height: 190,
                   decoration: BoxDecoration(
                     color: Colors.grey[800],
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: const Icon(Icons.music_note, size: 60, color: Colors.white),
                 ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+
+              // ** Equalizer golfvoorstelling in Portrait **
+              EqualizerBars(isPlaying: _isPlaying),
+              const SizedBox(height: 12),
+
               Text(
                 _currentMediaItem?.title ?? '',
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
