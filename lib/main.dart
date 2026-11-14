@@ -615,25 +615,26 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 }
 
-// ** Grotere & Duidelijkere Equalizer / Waveform Animated Widget **
-class EqualizerBars extends StatefulWidget {
+// ** Echte Multi-band Spectrum Analyzer (Equalizer Balkjes van links naar rechts) **
+class SpectrumVisualizer extends StatefulWidget {
   final bool isPlaying;
-  const EqualizerBars({super.key, required this.isPlaying});
+  const SpectrumVisualizer({super.key, required this.isPlaying});
 
   @override
-  State<EqualizerBars> createState() => _EqualizerBarsState();
+  State<SpectrumVisualizer> createState() => _SpectrumVisualizerState();
 }
 
-class _EqualizerBarsState extends State<EqualizerBars> with SingleTickerProviderStateMixin {
+class _SpectrumVisualizerState extends State<SpectrumVisualizer> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  final int barCount = 16; // Aantal losse frequentie-balkjes
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 400),
-    )..repeat(reverse: true);
+      duration: const Duration(milliseconds: 600),
+    )..repeat();
   }
 
   @override
@@ -644,41 +645,33 @@ class _EqualizerBarsState extends State<EqualizerBars> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isPlaying) {
-      return SizedBox(
-        height: 28,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(8, (index) => Container(
-            width: 4,
-            height: 6,
-            margin: const EdgeInsets.symmetric(horizontal: 2.5),
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(2),
-            ),
-          )),
-        ),
-      );
-    }
-
     return SizedBox(
-      height: 28,
+      height: 32,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
           return Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(9, (index) {
-              // Iets wildere en dynamische golfbeweging
-              final val = sin((_controller.value * 2 * pi) + (index * 0.5)).abs();
-              final height = 6.0 + (val * 20.0);
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: List.generate(barCount, (index) {
+              double height = 4.0;
+              if (widget.isPlaying) {
+                // Simuleer frequenties: links (bas) beweegt zwaarder, rechts (hoog) sneller/fijner
+                final seed = index * 0.4;
+                final wave = sin((_controller.value * 2 * pi) + seed);
+                final randomJitter = (index % 3 == 0) ? cos(_controller.value * 4 * pi + index) : 0.5;
+                
+                // Bass op links krijgt meer hoogte
+                final multiplier = (index < 5) ? 22.0 : (index < 11 ? 18.0 : 14.0);
+                height = 6.0 + ((wave.abs() * 0.7 + randomJitter.abs() * 0.3) * multiplier);
+              }
+              
+              // Kleurverloop van groen (bas) naar groengeel/helder (treble)
               return Container(
                 width: 4,
                 height: height,
-                margin: const EdgeInsets.symmetric(horizontal: 2.5),
                 decoration: BoxDecoration(
-                  color: Colors.greenAccent,
+                  color: index < 5 ? Colors.green : (index < 11 ? Colors.greenAccent : Colors.lightGreenAccent),
                   borderRadius: BorderRadius.circular(2),
                 ),
               );
@@ -841,33 +834,33 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ** LANDSCAPE LAYOUT: Maximale foto links (flex 5), rechts alle controls (flex 6) **
+            // ** LANDSCAPE LAYOUT: Foto nog breder (flex 6), controls rechts (flex 5) **
             if (isLandscape) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Nog grotere albumcover links voor maximale grootte
+                  // Extra brede en grote albumcover links
                   Expanded(
-                    flex: 5,
+                    flex: 6,
                     child: Center(
                       child: currentImagePath != null && File(currentImagePath).existsSync()
                           ? ClipRRect(
                               borderRadius: BorderRadius.circular(14),
                               child: Image.file(
                                 File(currentImagePath),
-                                width: 250,
-                                height: 250,
+                                width: 280,
+                                height: 280,
                                 fit: BoxFit.cover,
                               ),
                             )
                           : Container(
-                              width: 250,
-                              height: 250,
+                              width: 280,
+                              height: 280,
                               decoration: BoxDecoration(
                                 color: Colors.grey[800],
                                 borderRadius: BorderRadius.circular(14),
                               ),
-                              child: const Icon(Icons.music_note, size: 80, color: Colors.white),
+                              child: const Icon(Icons.music_note, size: 90, color: Colors.white),
                             ),
                     ),
                   ),
@@ -875,7 +868,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   
                   // Rechter kolom
                   Expanded(
-                    flex: 6,
+                    flex: 5,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -889,7 +882,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               color: Colors.white,
                               onPressed: () => audioHandler.skipToPrevious(),
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             IconButton(
                               icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
                               iconSize: 56,
@@ -903,7 +896,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 setState(() {});
                               },
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             IconButton(
                               icon: const Icon(Icons.skip_next),
                               iconSize: 38,
@@ -914,8 +907,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 4),
 
-                        // Grotere Equalizer wave voorstelling
-                        EqualizerBars(isPlaying: _isPlaying),
+                        // Echte Spectrum Analyzer / Balkjes Equalizer
+                        SpectrumVisualizer(isPlaying: _isPlaying),
                         const SizedBox(height: 4),
 
                         // Titel & Artiest
@@ -1021,15 +1014,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   borderRadius: BorderRadius.circular(16),
                   child: Image.file(
                     File(currentImagePath),
-                    width: 200,
-                    height: 200,
+                    width: 210,
+                    height: 210,
                     fit: BoxFit.cover,
                   ),
                 )
               else
                 Container(
-                  width: 200,
-                  height: 200,
+                  width: 210,
+                  height: 210,
                   decoration: BoxDecoration(
                     color: Colors.grey[800],
                     borderRadius: BorderRadius.circular(16),
@@ -1038,8 +1031,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ),
               const SizedBox(height: 14),
 
-              // Grotere Equalizer in Portrait
-              EqualizerBars(isPlaying: _isPlaying),
+              // Spectrum Analyzer in Portrait
+              SpectrumVisualizer(isPlaying: _isPlaying),
               const SizedBox(height: 14),
 
               Text(
@@ -1174,4 +1167,5 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
 
