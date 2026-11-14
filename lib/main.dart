@@ -201,7 +201,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> skipToNext() async {
     if (_player.hasNext) {
-      await _player.skipToNext();
+      await _player.seekToNext();
     } else {
       await _player.seek(Duration.zero, index: 0);
     }
@@ -211,7 +211,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   @override
   Future<void> skipToPrevious() async {
     if (_player.hasPrevious) {
-      await _player.skipToPrevious();
+      await _player.seekToPrevious();
     } else {
       await _player.seek(Duration.zero, index: playlist.length - 1);
     }
@@ -615,7 +615,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 }
 
-// ** Spectrum Analyzer gekoppeld aan de werkelijke audio positionStream **
 class SpectrumVisualizer extends StatelessWidget {
   final bool isPlaying;
   final Stream<Duration> positionStream;
@@ -659,13 +658,10 @@ class SpectrumVisualizer extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             crossAxisAlignment: CrossAxisAlignment.end,
             children: List.generate(barCount, (index) {
-              // Genereer op basis van de werkelijke afspeeltijd (positionMs) unieke bewegingen per balkje
-              // Zo reageert het direct op de loop van het nummer en stopt het direct bij pauze/zoeken
               final timeFactor = positionMs / 180.0;
               final wave = sin(timeFactor + (index * 0.4));
               final cosWave = cos(timeFactor * 0.7 + (index * 0.3));
               
-              // Bas op links krijgt meer hoogte, treble op rechts beweegt sneller
               final multiplier = (index < 5) ? 24.0 : (index < 11 ? 18.0 : 12.0);
               final height = 6.0 + ((wave.abs() * 0.6 + cosWave.abs() * 0.4) * multiplier);
 
@@ -817,7 +813,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
     final currentImagePath = currentSong.imagePath;
 
-    // Controleer of de telefoon horizontaal (landscape) staat
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
@@ -836,12 +831,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ** LANDSCAPE LAYOUT: Maximale albumcover links (flex 6), controls rechts (flex 5) **
             if (isLandscape) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Extra brede en grote albumcover links
                   Expanded(
                     flex: 6,
                     child: Center(
@@ -868,13 +861,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   ),
                   const SizedBox(width: 16),
                   
-                  // Rechter kolom
                   Expanded(
                     flex: 5,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Knoppen bovenaan rechts
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -909,14 +900,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 4),
 
-                        // Gekoppelde Spectrum Analyzer
                         SpectrumVisualizer(
                           isPlaying: _isPlaying,
                           positionStream: audioHandler.positionStream,
                         ),
                         const SizedBox(height: 4),
 
-                        // Titel & Artiest
                         Text(
                           _currentMediaItem?.title ?? '',
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -934,7 +923,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 6),
 
-                        // VTT Ondertiteling / Songtekst Box
                         Container(
                           constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
                           alignment: Alignment.center,
@@ -964,7 +952,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 2),
 
-                        // Voortgangsbalk (Slider)
                         StreamBuilder<Duration>(
                           stream: audioHandler.positionStream,
                           builder: (context, snapshotPosition) {
@@ -1013,7 +1000,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ],
               ),
             ] else ...[
-              // ** PORTRAIT LAYOUT: Standaard onder elkaar **
               if (currentImagePath != null && File(currentImagePath).existsSync())
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
@@ -1036,7 +1022,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ),
               const SizedBox(height: 14),
 
-              // Gekoppelde Spectrum Analyzer in Portrait
               SpectrumVisualizer(
                 isPlaying: _isPlaying,
                 positionStream: audioHandler.positionStream,
@@ -1059,7 +1044,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
               const SizedBox(height: 12),
 
-              // ** VTT Ondertiteling / Songtekst Box **
               Container(
                 constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
                 alignment: Alignment.center,
@@ -1135,7 +1119,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               
               const SizedBox(height: 16),
               
-              // Knoppen onderaan in portrait
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -1175,3 +1158,4 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
