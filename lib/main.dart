@@ -615,7 +615,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 }
 
-// ** Equalizer / Waveform Animated Widget **
+// ** Grotere & Duidelijkere Equalizer / Waveform Animated Widget **
 class EqualizerBars extends StatefulWidget {
   final bool isPlaying;
   const EqualizerBars({super.key, required this.isPlaying});
@@ -632,7 +632,7 @@ class _EqualizerBarsState extends State<EqualizerBars> with SingleTickerProvider
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 400),
     )..repeat(reverse: true);
   }
 
@@ -646,15 +646,15 @@ class _EqualizerBarsState extends State<EqualizerBars> with SingleTickerProvider
   Widget build(BuildContext context) {
     if (!widget.isPlaying) {
       return SizedBox(
-        height: 18,
+        height: 28,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: List.generate(6, (index) => Container(
-            width: 3,
-            height: 4,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
+          children: List.generate(8, (index) => Container(
+            width: 4,
+            height: 6,
+            margin: const EdgeInsets.symmetric(horizontal: 2.5),
             decoration: BoxDecoration(
-              color: Colors.grey,
+              color: Colors.grey[700],
               borderRadius: BorderRadius.circular(2),
             ),
           )),
@@ -663,19 +663,20 @@ class _EqualizerBarsState extends State<EqualizerBars> with SingleTickerProvider
     }
 
     return SizedBox(
-      height: 18,
+      height: 28,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
           return Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(7, (index) {
-              final val = sin((_controller.value * 2 * pi) + (index * 0.7)).abs();
-              final height = 4.0 + (val * 14.0);
+            children: List.generate(9, (index) {
+              // Iets wildere en dynamische golfbeweging
+              final val = sin((_controller.value * 2 * pi) + (index * 0.5)).abs();
+              final height = 6.0 + (val * 20.0);
               return Container(
-                width: 3,
+                width: 4,
                 height: height,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
+                margin: const EdgeInsets.symmetric(horizontal: 2.5),
                 decoration: BoxDecoration(
                   color: Colors.greenAccent,
                   borderRadius: BorderRadius.circular(2),
@@ -836,45 +837,45 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         centerTitle: true,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: 24.0, vertical: isLandscape ? 4.0 : 16.0),
+        padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: isLandscape ? 4.0 : 16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // ** LANDSCAPE LAYOUT: Maximale foto links, alle info/knoppen/wave rechts **
+            // ** LANDSCAPE LAYOUT: Maximale foto links (flex 5), rechts alle controls (flex 6) **
             if (isLandscape) ...[
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Maximale albumcover links
+                  // Nog grotere albumcover links voor maximale grootte
                   Expanded(
-                    flex: 4,
+                    flex: 5,
                     child: Center(
                       child: currentImagePath != null && File(currentImagePath).existsSync()
                           ? ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(14),
                               child: Image.file(
                                 File(currentImagePath),
-                                width: 220,
-                                height: 220,
+                                width: 250,
+                                height: 250,
                                 fit: BoxFit.cover,
                               ),
                             )
                           : Container(
-                              width: 220,
-                              height: 220,
+                              width: 250,
+                              height: 250,
                               decoration: BoxDecoration(
                                 color: Colors.grey[800],
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                              child: const Icon(Icons.music_note, size: 70, color: Colors.white),
+                              child: const Icon(Icons.music_note, size: 80, color: Colors.white),
                             ),
                     ),
                   ),
                   const SizedBox(width: 16),
                   
-                  // Rechter kolom: Knoppen, golfvoorstelling, Titel/Artiest, VTT Ondertiteling én Voortgangsbalk
+                  // Rechter kolom
                   Expanded(
-                    flex: 5,
+                    flex: 6,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -884,14 +885,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           children: [
                             IconButton(
                               icon: const Icon(Icons.skip_previous),
-                              iconSize: 36,
+                              iconSize: 38,
                               color: Colors.white,
                               onPressed: () => audioHandler.skipToPrevious(),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 6),
                             IconButton(
                               icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                              iconSize: 52,
+                              iconSize: 56,
                               color: Colors.green,
                               onPressed: () async {
                                 if (_isPlaying) {
@@ -902,10 +903,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 setState(() {});
                               },
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 6),
                             IconButton(
                               icon: const Icon(Icons.skip_next),
-                              iconSize: 36,
+                              iconSize: 38,
                               color: Colors.white,
                               onPressed: () => audioHandler.skipToNext(),
                             ),
@@ -913,14 +914,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 4),
 
-                        // ** Waveform / Equalizer voorstelling tussen knoppen en titel **
+                        // Grotere Equalizer wave voorstelling
                         EqualizerBars(isPlaying: _isPlaying),
                         const SizedBox(height: 4),
 
                         // Titel & Artiest
                         Text(
                           _currentMediaItem?.title ?? '',
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -928,7 +929,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         const SizedBox(height: 2),
                         Text(
                           _currentMediaItem?.artist ?? 'Onbekende Artiest',
-                          style: const TextStyle(fontSize: 11, color: Colors.grey),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -939,7 +940,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         Container(
                           constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
                           alignment: Alignment.center,
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: StreamBuilder<Duration>(
                             stream: audioHandler.positionStream,
                             builder: (context, snapshot) {
@@ -965,7 +966,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 2),
 
-                        // Voortgangsbalk (Slider) rechts onderaan
+                        // Voortgangsbalk (Slider)
                         StreamBuilder<Duration>(
                           stream: audioHandler.positionStream,
                           builder: (context, snapshotPosition) {
@@ -1014,32 +1015,32 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ],
               ),
             ] else ...[
-              // ** PORTRAIT LAYOUT: Standaard onder elkaar (verticaal) **
+              // ** PORTRAIT LAYOUT: Standaard onder elkaar **
               if (currentImagePath != null && File(currentImagePath).existsSync())
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Image.file(
                     File(currentImagePath),
-                    width: 190,
-                    height: 190,
+                    width: 200,
+                    height: 200,
                     fit: BoxFit.cover,
                   ),
                 )
               else
                 Container(
-                  width: 190,
-                  height: 190,
+                  width: 200,
+                  height: 200,
                   decoration: BoxDecoration(
                     color: Colors.grey[800],
                     borderRadius: BorderRadius.circular(16),
                   ),
-                  child: const Icon(Icons.music_note, size: 60, color: Colors.white),
+                  child: const Icon(Icons.music_note, size: 70, color: Colors.white),
                 ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
 
-              // ** Equalizer golfvoorstelling in Portrait **
+              // Grotere Equalizer in Portrait
               EqualizerBars(isPlaying: _isPlaying),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
 
               Text(
                 _currentMediaItem?.title ?? '',
@@ -1173,3 +1174,4 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
