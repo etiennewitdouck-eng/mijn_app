@@ -46,7 +46,14 @@
                     <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
                     <key>UISceneStoryboardFile</key>
                     <string>Main</string>
-                </dict>
+                	<key>NSLocalNetworkUsageDescription</key>
+	<string>Verbind met je Google TV om muziek via je lokale wifi-netwerk te verzenden.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
             </array>
             
             <!-- Configuratie voor het CarPlay autoscherm -->
