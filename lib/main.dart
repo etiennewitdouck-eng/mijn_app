@@ -515,6 +515,106 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     );
   }
 
+  Future<void> _sendFolderToTv() async {
+    final addressController = TextEditingController();
+    final selectedAddress = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Verbinden met Google TV'),
+        content: TextField(
+          controller: addressController,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            labelText: 'IP-adres van de tv',
+            hintText: 'bijv. 192.168.1.25:8765',
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Annuleren')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, addressController.text.trim()),
+            child: const Text('Verbinden')),
+        ],
+      ),
+    );
+    if (selectedAddress == null || selectedAddress.isEmpty || !mounted) {
+      addressController.dispose();
+      return;
+    }
+
+    final folderNames = _folders.keys.toList();
+    final folderName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Welke map verzenden?'),
+        children: folderNames.map((name) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(dialogContext, name),
+          child: Text('$name (\${_folders[name]!.length} nummers)'),
+        )).toList(),
+      ),
+    );
+    if (folderName == null || !mounted) {
+      addressController.dispose();
+      return;
+    }
+
+    var raw = selectedAddress.trim();
+    if (!raw.contains('://')) raw = 'http://$raw';
+    final parsed = Uri.tryParse(raw);
+    if (parsed == null || parsed.host.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ongeldig IP-adres. Gebruik bijvoorbeeld 192.168.1.25:8765.')),
+      );
+      addressController.dispose();
+      return;
+    }
+    final baseUri = Uri(scheme: 'http', host: parsed.host,
+        port: parsed.hasPort ? parsed.port : 8765);
+    final songs = _folders[folderName]!;
+    final client = HttpClient();
+    var sent = 0;
+    try {
+      final statusRequest = await client.getUrl(baseUri.replace(path: '/status'));
+      final statusResponse = await statusRequest.close().timeout(const Duration(seconds: 8));
+      if (statusResponse.statusCode != HttpStatus.ok) {
+        throw Exception('De tv-ontvanger antwoordde niet (HTTP \${statusResponse.statusCode}).');
+      }
+      await statusResponse.drain();
+
+      for (final song in songs) {
+        final file = File(song.path);
+        if (!await file.exists()) continue;
+        final uploadUri = baseUri.replace(path: '/upload',
+            queryParameters: {'name': file.uri.pathSegments.last});
+        final request = await client.postUrl(uploadUri);
+        request.headers.contentType = ContentType('audio', 'mpeg');
+        await request.addStream(file.openRead());
+        final response = await request.close().timeout(const Duration(minutes: 5));
+        final responseText = await response.transform(utf8.decoder).join();
+        if (response.statusCode != HttpStatus.created) {
+          throw Exception('Upload mislukt voor \${file.uri.pathSegments.last}: $responseText');
+        }
+        sent++;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$sent van \${songs.length} MP3-bestanden naar Google TV verzonden.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Verzenden mislukt: $e')),
+        );
+      }
+    } finally {
+      client.close(force: true);
+      addressController.dispose();
+    }
+  }
+
   void _toggleShuffle() async {
     await audioHandler.toggleShuffle();
     setState(() {
@@ -546,6 +646,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       appBar: AppBar(
         title: const Text('Mijn MP3 Mappen'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.cast_connected),
+            onPressed: _sendFolderToTv,
+            tooltip: 'Verzend muziek naar Google TV',
+          ),
           IconButton(
             icon: Icon(
               Icons.shuffle,
