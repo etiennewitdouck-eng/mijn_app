@@ -280,7 +280,7 @@ class _TvReceiverPageState extends State<TvReceiverPage> {
   Future<void> _startReceiver() async {
     try {
       final support = await getApplicationSupportDirectory();
-      _cacheDirectory = Directory('\${support.path}/ChromecastCache');
+      _cacheDirectory = Directory('${support.path}/ChromecastCache');
       await _cacheDirectory!.create(recursive: true);
       await _refreshSongs();
       final server = await HttpServer.bind(InternetAddress.anyIPv4, 8765);
@@ -293,7 +293,7 @@ class _TvReceiverPageState extends State<TvReceiverPage> {
       if (mounted) setState(() {
         _connectionInfo = addresses.isEmpty
             ? 'Verbonden met wifi. Poort: 8765'
-            : addresses.map((ip) => 'http://$ip:8765').join('\\n');
+            : addresses.map((ip) => 'http://$ip:8765').join('\n');
       });
     } catch (e) {
       if (mounted) setState(() {
@@ -323,7 +323,7 @@ class _TvReceiverPageState extends State<TvReceiverPage> {
           await request.response.close();
           return;
         }
-        final destination = File('\${_cacheDirectory!.path}/$safeName');
+        final destination = File('${_cacheDirectory!.path}/$safeName');
         await request.pipe(destination.openWrite());
         await _refreshSongs();
         request.response.statusCode = HttpStatus.created;
@@ -1351,7 +1351,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           const Text('MP3-kopieën worden op de tv opgeslagen. Originelen blijven op de iPhone.'),
           if (_error != null) Text(_error!, style: const TextStyle(color: Colors.redAccent)),
           const Divider(height: 28),
-          Text('Opgeslagen nummers (\${_songs.length})',
+          Text('Opgeslagen nummers (${_songs.length})',
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Expanded(child: _songs.isEmpty
