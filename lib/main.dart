@@ -551,7 +551,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         title: const Text('Welke map verzenden?'),
         children: folderNames.map((name) => SimpleDialogOption(
           onPressed: () => Navigator.pop(dialogContext, name),
-          child: Text('$name (\${_folders[name]!.length} nummers)'),
+          child: Text('$name (${_folders[name]!.length} nummers)'),
         )).toList(),
       ),
     );
@@ -579,7 +579,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       final statusRequest = await client.getUrl(baseUri.replace(path: '/status'));
       final statusResponse = await statusRequest.close().timeout(const Duration(seconds: 8));
       if (statusResponse.statusCode != HttpStatus.ok) {
-        throw Exception('De tv-ontvanger antwoordde niet (HTTP \${statusResponse.statusCode}).');
+        throw Exception('De tv-ontvanger antwoordde niet (HTTP ${statusResponse.statusCode}).');
       }
       await statusResponse.drain();
 
@@ -594,13 +594,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         final response = await request.close().timeout(const Duration(minutes: 5));
         final responseText = await response.transform(utf8.decoder).join();
         if (response.statusCode != HttpStatus.created) {
-          throw Exception('Upload mislukt voor \${file.uri.pathSegments.last}: $responseText');
+          throw Exception('Upload mislukt voor ${file.uri.pathSegments.last}: $responseText');
         }
         sent++;
       }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$sent van \${songs.length} MP3-bestanden naar Google TV verzonden.')),
+          SnackBar(content: Text('$sent van ${songs.length} MP3-bestanden naar Google TV verzonden.')),
         );
       }
     } catch (e) {
