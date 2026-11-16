@@ -24,6 +24,13 @@
     <string>????</string>
     <key>CFBundleVersion</key>
     <string>$(FLUTTER_BUILD_NUMBER)</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Verbind met je Google TV om muziek via je lokale wifi-netwerk te verzenden.</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <key>LSRequiresIPhoneOS</key>
     <true/>
     
@@ -46,13 +53,6 @@
                     <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
                     <key>UISceneStoryboardFile</key>
                     <string>Main</string>
-                	<key>NSLocalNetworkUsageDescription</key>
-	<string>Verbind met je Google TV om muziek via je lokale wifi-netwerk te verzenden.</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 </dict>
             </array>
             
