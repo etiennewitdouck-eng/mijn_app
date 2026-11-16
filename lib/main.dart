@@ -21,25 +21,27 @@ void main() async {
     ),
   );
 
-  FlutterCarplay.setRootTemplate(
-    rootTemplate: CPListTemplate(
-      title: 'Kia Ceed Mappen',
-      sections: [
-        CPListSection(
-          items: [
-            CPListItem(
-              text: 'Mappen laden...',
-              detailText: 'Even geduld a.u.b.',
-              onPress: (complete, self) {
-                complete();
-              },
-            ),
-          ],
-        ),
-      ],
-    ),
-    animated: false,
-  );
+  if (Platform.isIOS) {
+    FlutterCarplay.setRootTemplate(
+      rootTemplate: CPListTemplate(
+        title: 'Kia Ceed Mappen',
+        sections: [
+          CPListSection(
+            items: [
+              CPListItem(
+                text: 'Mappen laden...',
+                detailText: 'Even geduld a.u.b.',
+                onPress: (complete, self) {
+                  complete();
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+      animated: false,
+    );
+  }
 
   runApp(const MyApp());
 }
@@ -380,7 +382,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 
   void _updateCarPlayTemplate() {
-    if (_folders.isEmpty) return;
+    if (!Platform.isIOS || _folders.isEmpty) return;
 
     final List<CPListItem> folderItems = _folders.entries.map((entry) {
       final folderName = entry.key;
