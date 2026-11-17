@@ -708,7 +708,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   List<SubtitleItem> _subtitlesNl = [];
   bool _showNlSubtitles = false;
 
-  // Schakelaar om video aan of uit te zetten (handig voor AirPin Lite vs Miracast)
+  // Schakelaar voor video aan/uit (Aan = MiraScreen / lokaal, Uit = AirPin Lite poster modus)
   bool _enableVideoPlayback = true;
 
   VideoPlayerController? _videoController;
@@ -770,7 +770,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
 
-    // Alleen video inlezen als de schakelaar aan staat én er een video pad is
+    // Alleen video laden als de schakelaar aan staat EN er een videobestand is
     if (_enableVideoPlayback && currentSong.videoPath != null) {
       final videoFile = File(currentSong.videoPath!);
       if (videoFile.existsSync()) {
@@ -792,7 +792,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             });
           }
         }).catchError((error) {
-          debugPrint("Fout bij video: $error");
+          debugPrint("Fout bij video initialiseren: $error");
         });
       }
     }
@@ -950,13 +950,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
         actions: [
-          // Schakelknop voor Video Aan / Uit (Poster modus)
+          // Schakelaar voor Video Aan / Uit
           IconButton(
             icon: Icon(
               _enableVideoPlayback ? Icons.videocam : Icons.videocam_off,
               color: _enableVideoPlayback ? Colors.green : Colors.grey,
             ),
-            tooltip: _enableVideoPlayback ? 'Video aan (Zet uit bij AirPin)' : 'Poster modus aan (Ideaal voor AirPin)',
+            tooltip: _enableVideoPlayback ? 'Video Aan (MiraScreen)' : 'Poster Modus (AirPin Lite)',
             onPressed: () {
               setState(() {
                 _enableVideoPlayback = !_enableVideoPlayback;
