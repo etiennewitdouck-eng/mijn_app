@@ -6,7 +6,6 @@ import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
-import 'package:video_player/video_player.dart';
 
 late MyAudioHandler audioHandler;
 
@@ -225,7 +224,6 @@ class SongItem {
   final String title;
   final String artist;
   final String? imagePath;
-  final String? videoPath;
   final String? vttPath;
   final String? vttNlPath;
   final String folderName;
@@ -235,7 +233,6 @@ class SongItem {
     required this.title,
     required this.artist,
     this.imagePath,
-    this.videoPath,
     this.vttPath,
     this.vttNlPath,
     required this.folderName,
@@ -333,9 +330,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final potentialImage = File('${entity.path}/$baseName.jpg');
                 String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
-                final potentialVideo = File('${entity.path}/$baseName.mp4');
-                String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
-
                 final potentialVtt = File('${entity.path}/$baseName.vtt');
                 String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
 
@@ -347,7 +341,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   title: title,
                   artist: artist,
                   imagePath: imgPath,
-                  videoPath: videoPath,
                   vttPath: vttPath,
                   vttNlPath: vttNlPath,
                   folderName: folderName,
@@ -708,9 +701,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   List<SubtitleItem> _subtitlesNl = [];
   bool _showNlSubtitles = false;
 
-  VideoPlayerController? _videoController;
-  bool _isVideoInitialized = false;
-
   @override
   void initState() {
     super.initState();
@@ -722,13 +712,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       if (mounted) {
         setState(() {
           _isPlaying = state.playing;
-          if (_videoController != null && _isVideoInitialized) {
-            if (_isPlaying && !_videoController!.value.isPlaying) {
-              _videoController!.play();
-            } else if (!_isPlaying && _videoController!.value.isPlaying) {
-              _videoController!.pause();
-            }
-          }
         });
       }
     });
@@ -743,21 +726,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     });
   }
 
-  @override
-  void dispose() {
-    _videoController?.dispose();
-    super.dispose();
-  }
-
   void _loadSongDetails() {
     _subtitles = [];
     _subtitlesNl = [];
-    
-    // Sluit de oude controller op en zorg dat audio-sessies vrijkomen
-    final oldController = _videoController;
-    _videoController = null;
-    _isVideoInitialized = false;
-    oldController?.dispose();
 
     final currentPath = _currentMediaItem?.id;
     if (currentPath == null) return;
@@ -767,42 +738,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       (s) => s.path == currentPath,
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
-
-    // Initialiseer nieuwe video als er een MP4 bestand is
-    if (currentSong.videoPath != null) {
-      final videoFile = File(currentSong.videoPath!);
-      if (videoFile.existsSync()) {
-        // Met `mixWithOthers: true` én geen external playback voorkom je dat iOS/AirPin de audioroute en het tv-scherm overneemt
-        final controller = VideoPlayerController.file(
-          videoFile,
-          videoPlayerOptions: VideoPlayerOptions(
-            mixWithOthers: true,
-            allowBackgroundPlayback: false,
-          ),
-        );
-        _videoController = controller;
-        
-        controller.initialize().then((_) {
-          if (mounted && _videoController == controller) {
-            setState(() {
-              _isVideoInitialized = true;
-              controller.setLooping(true);
-              controller.setVolume(0.0); // Videogeluid uit, audiotrack loopt strak via just_audio
-              if (_isPlaying) {
-                controller.play();
-              }
-            });
-          }
-        }).catchError((error) {
-          debugPrint("Fout bij initialiseren video: $error");
-        });
-      }
-    } else {
-      // Als er GEEN video is, dwingen we audioHandler om de audio-focus en stream te bevestigen
-      if (_isPlaying) {
-        audioHandler.play();
-      }
-    }
 
     // VTT inlezen
     if (currentSong.vttPath != null) {
@@ -906,24 +841,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
+    // Altijd een nette poster of muzieknotatie (geen videoplayer die AirPin stoort)
     Widget buildMediaDisplay({required double size}) {
-      if (_videoController != null && _isVideoInitialized) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _videoController!.value.size.width,
-                height: _videoController!.value.size.height,
-                child: VideoPlayer(_videoController!),
-              ),
-            ),
-          ),
-        );
-      } else if (currentImagePath != null && File(currentImagePath).existsSync()) {
+      if (currentImagePath != null && File(currentImagePath).existsSync()) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: Image.file(
