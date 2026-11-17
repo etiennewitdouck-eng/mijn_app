@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
+import 'package:video_player/video_player.dart';
 
 late MyAudioHandler audioHandler;
 
@@ -224,6 +225,7 @@ class SongItem {
   final String title;
   final String artist;
   final String? imagePath;
+  final String? videoPath; // Extra veld voor MP4 video bestand
   final String? vttPath;
   final String? vttNlPath;
   final String folderName;
@@ -233,6 +235,7 @@ class SongItem {
     required this.title,
     required this.artist,
     this.imagePath,
+    this.videoPath,
     this.vttPath,
     this.vttNlPath,
     required this.folderName,
@@ -330,6 +333,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final potentialImage = File('${entity.path}/$baseName.jpg');
                 String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
+                // Controleer op MP4 video bestand
+                final potentialVideo = File('${entity.path}/$baseName.mp4');
+                String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
+
                 final potentialVtt = File('${entity.path}/$baseName.vtt');
                 String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
 
@@ -341,6 +348,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   title: title,
                   artist: artist,
                   imagePath: imgPath,
+                  videoPath: videoPath,
                   vttPath: vttPath,
                   vttNlPath: vttNlPath,
                   folderName: folderName,
@@ -701,17 +709,28 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   List<SubtitleItem> _subtitlesNl = [];
   bool _showNlSubtitles = false;
 
+  // Video controller voor MP4 weergave
+  VideoPlayerController? _videoController;
+  bool _isVideoInitialized = false;
+
   @override
   void initState() {
     super.initState();
     _isPlaying = audioHandler._player.playing;
     _currentMediaItem = audioHandler.mediaItem.value;
-    _loadSubtitles();
+    _loadSongDetails();
 
     audioHandler.playbackState.listen((state) {
       if (mounted) {
         setState(() {
           _isPlaying = state.playing;
+          if (_videoController != null && _isVideoInitialized) {
+            if (_isPlaying && !_videoController!.value.isPlaying) {
+              _videoController!.play();
+            } else if (!_isPlaying && _videoController!.value.isPlaying) {
+              _videoController!.pause();
+            }
+          }
         });
       }
     });
@@ -720,15 +739,25 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       if (mounted) {
         setState(() {
           _currentMediaItem = item;
-          _loadSubtitles();
+          _loadSongDetails();
         });
       }
     });
   }
 
-  void _loadSubtitles() {
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  void _loadSongDetails() {
     _subtitles = [];
     _subtitlesNl = [];
+    _videoController?.dispose();
+    _videoController = null;
+    _isVideoInitialized = false;
+
     final currentPath = _currentMediaItem?.id;
     if (currentPath == null) return;
 
@@ -738,6 +767,27 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
 
+    // Initialiseer video als er een MP4 bestand is
+    if (currentSong.videoPath != null) {
+      final videoFile = File(currentSong.videoPath!);
+      if (videoFile.existsSync()) {
+        _videoController = VideoPlayerController.file(videoFile)
+          ..initialize().then((_) {
+            if (mounted) {
+              setState(() {
+                _isVideoInitialized = true;
+                _videoController?.setLooping(true);
+                _videoController?.setVolume(0.0); // Geluid uit van video, audio loopt via just_audio
+                if (_isPlaying) {
+                  _videoController?.play();
+                }
+              });
+            }
+          });
+      }
+    }
+
+    // VTT inlezen
     if (currentSong.vttPath != null) {
       final file = File(currentSong.vttPath!);
       if (file.existsSync()) {
@@ -834,12 +884,51 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
     final currentImagePath = currentSong.imagePath;
     
-    // Controleer of er überhaupt een vtt-bestand is
     final hasAnySubtitle = currentSong.vttPath != null || currentSong.vttNlPath != null;
-    // Controleer of er TWEE bestanden zijn om te kunnen schakelen
     final hasBothSubtitles = currentSong.vttPath != null && currentSong.vttNlPath != null;
 
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
+
+    // Helper widget voor de poster of video weergave
+    Widget buildMediaDisplay({required double size}) {
+      if (_videoController != null && _isVideoInitialized) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _videoController!.value.size.width,
+                height: _videoController!.value.size.height,
+                child: VideoPlayer(_videoController!),
+              ),
+            ),
+          ),
+        );
+      } else if (currentImagePath != null && File(currentImagePath).existsSync()) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: Image.file(
+            File(currentImagePath),
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+          ),
+        );
+      } else {
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: Colors.grey[800],
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Icon(Icons.music_note, size: 70, color: Colors.white),
+        );
+      }
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -852,7 +941,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
         actions: [
-          // ** Schakelknop verschijnt ALLEEN als er 2 vtt-bestanden zijn **
           if (hasBothSubtitles)
             Padding(
               padding: const EdgeInsets.only(right: 12.0),
@@ -888,25 +976,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   Expanded(
                     flex: 6,
                     child: Center(
-                      child: currentImagePath != null && File(currentImagePath).existsSync()
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: Image.file(
-                                File(currentImagePath),
-                                width: 300,
-                                height: 300,
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : Container(
-                              width: 300,
-                              height: 300,
-                              decoration: BoxDecoration(
-                                color: Colors.grey[800],
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: const Icon(Icons.music_note, size: 90, color: Colors.white),
-                            ),
+                      child: buildMediaDisplay(size: 300),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -973,7 +1043,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 6),
 
-                        // ** Toon ondertiteling als er EEN of TWEE bestanden zijn **
                         if (hasAnySubtitle)
                           Container(
                             constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
@@ -983,7 +1052,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               stream: audioHandler.positionStream,
                               builder: (context, snapshot) {
                                 final position = snapshot.data ?? Duration.zero;
-                                // Als er gekozen is voor NL en NL bestaat, toon NL. Anders het origineel (of fallback naar NL als origineel ontbreekt).
                                 final activeList = (_showNlSubtitles && _subtitlesNl.isNotEmpty) ? _subtitlesNl : (_subtitles.isNotEmpty ? _subtitles : _subtitlesNl);
                                 final activeSub = activeList.firstWhere(
                                   (sub) => position >= sub.start && position <= sub.end,
@@ -1054,26 +1122,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ],
               ),
             ] else ...[
-              if (currentImagePath != null && File(currentImagePath).existsSync())
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.file(
-                    File(currentImagePath),
-                    width: 210,
-                    height: 210,
-                    fit: BoxFit.cover,
-                  ),
-                )
-              else
-                Container(
-                  width: 210,
-                  height: 210,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Icon(Icons.music_note, size: 70, color: Colors.white),
-                ),
+              buildMediaDisplay(size: 210),
               const SizedBox(height: 14),
 
               SpectrumVisualizer(
@@ -1098,7 +1147,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
               const SizedBox(height: 12),
 
-              // ** Toon ondertiteling als er EEN of TWEE bestanden zijn in Portrait **
               if (hasAnySubtitle)
                 Container(
                   constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
@@ -1174,6 +1222,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 },
               ),
               
+              const WheneverSpacerIfNeeded(),
               const SizedBox(height: 16),
               
               Row(
@@ -1213,5 +1262,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         ),
       ),
     );
+  }
+}
+
+// Klein hulp-widgetje voor de leesbaarheid
+class WheneverSpacerIfNeeded extends StatelessWidget {
+  const WheneverSpacerIfNeeded({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
   }
 }
