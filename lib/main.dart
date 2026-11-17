@@ -753,7 +753,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     _subtitles = [];
     _subtitlesNl = [];
     
-    // ** BELANGRIJK: Oude video controller netjes opruimen voordat we een nieuwe laden **
+    // Sluit de oude controller op en zorg dat audio-sessies vrijkomen
     final oldController = _videoController;
     _videoController = null;
     _isVideoInitialized = false;
@@ -768,11 +768,18 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
 
-    // Initialiseer nieuwe video voor het huidige nummer
+    // Initialiseer nieuwe video als er een MP4 bestand is
     if (currentSong.videoPath != null) {
       final videoFile = File(currentSong.videoPath!);
       if (videoFile.existsSync()) {
-        final controller = VideoPlayerController.file(videoFile);
+        // Met `mixWithOthers: true` én geen external playback voorkom je dat iOS/AirPin de audioroute en het tv-scherm overneemt
+        final controller = VideoPlayerController.file(
+          videoFile,
+          videoPlayerOptions: VideoPlayerOptions(
+            mixWithOthers: true,
+            allowBackgroundPlayback: false,
+          ),
+        );
         _videoController = controller;
         
         controller.initialize().then((_) {
@@ -780,8 +787,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             setState(() {
               _isVideoInitialized = true;
               controller.setLooping(true);
-              // We zetten het geluid van de video uit, zodat het geluid uitsluitend via just_audio loopt
-              controller.setVolume(0.0);
+              controller.setVolume(0.0); // Videogeluid uit, audiotrack loopt strak via just_audio
               if (_isPlaying) {
                 controller.play();
               }
@@ -790,6 +796,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         }).catchError((error) {
           debugPrint("Fout bij initialiseren video: $error");
         });
+      }
+    } else {
+      // Als er GEEN video is, dwingen we audioHandler om de audio-focus en stream te bevestigen
+      if (_isPlaying) {
+        audioHandler.play();
       }
     }
 
