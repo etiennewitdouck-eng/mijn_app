@@ -225,7 +225,7 @@ class SongItem {
   final String title;
   final String artist;
   final String? imagePath;
-  final String? videoPath; // Extra veld voor MP4 video bestand
+  final String? videoPath;
   final String? vttPath;
   final String? vttNlPath;
   final String folderName;
@@ -333,7 +333,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final potentialImage = File('${entity.path}/$baseName.jpg');
                 String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
-                // Controleer op MP4 video bestand
                 final potentialVideo = File('${entity.path}/$baseName.mp4');
                 String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
 
@@ -709,7 +708,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   List<SubtitleItem> _subtitlesNl = [];
   bool _showNlSubtitles = false;
 
-  // Video controller voor MP4 weergave
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
 
@@ -754,9 +752,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   void _loadSongDetails() {
     _subtitles = [];
     _subtitlesNl = [];
-    _videoController?.dispose();
+    
+    // ** BELANGRIJK: Oude video controller netjes opruimen voordat we een nieuwe laden **
+    final oldController = _videoController;
     _videoController = null;
     _isVideoInitialized = false;
+    oldController?.dispose();
 
     final currentPath = _currentMediaItem?.id;
     if (currentPath == null) return;
@@ -767,23 +768,28 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
 
-    // Initialiseer video als er een MP4 bestand is
+    // Initialiseer nieuwe video voor het huidige nummer
     if (currentSong.videoPath != null) {
       final videoFile = File(currentSong.videoPath!);
       if (videoFile.existsSync()) {
-        _videoController = VideoPlayerController.file(videoFile)
-          ..initialize().then((_) {
-            if (mounted) {
-              setState(() {
-                _isVideoInitialized = true;
-                _videoController?.setLooping(true);
-                _videoController?.setVolume(0.0); // Geluid uit van video, audio loopt via just_audio
-                if (_isPlaying) {
-                  _videoController?.play();
-                }
-              });
-            }
-          });
+        final controller = VideoPlayerController.file(videoFile);
+        _videoController = controller;
+        
+        controller.initialize().then((_) {
+          if (mounted && _videoController == controller) {
+            setState(() {
+              _isVideoInitialized = true;
+              controller.setLooping(true);
+              // We zetten het geluid van de video uit, zodat het geluid uitsluitend via just_audio loopt
+              controller.setVolume(0.0);
+              if (_isPlaying) {
+                controller.play();
+              }
+            });
+          }
+        }).catchError((error) {
+          debugPrint("Fout bij initialiseren video: $error");
+        });
       }
     }
 
@@ -889,7 +895,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
-    // Helper widget voor de poster of video weergave
     Widget buildMediaDisplay({required double size}) {
       if (_videoController != null && _isVideoInitialized) {
         return ClipRRect(
@@ -1222,7 +1227,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 },
               ),
               
-              const WheneverSpacerIfNeeded(),
               const SizedBox(height: 16),
               
               Row(
@@ -1262,15 +1266,5 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         ),
       ),
     );
-  }
-}
-
-// Klein hulp-widgetje voor de leesbaarheid
-class WheneverSpacerIfNeeded extends StatelessWidget {
-  const WheneverSpacerIfNeeded({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink();
   }
 }
