@@ -6,6 +6,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
+import 'package:video_player/video_player.dart';
 
 late MyAudioHandler audioHandler;
 
@@ -224,6 +225,7 @@ class SongItem {
   final String title;
   final String artist;
   final String? imagePath;
+  final String? videoPath;
   final String? vttPath;
   final String? vttNlPath;
   final String folderName;
@@ -233,6 +235,7 @@ class SongItem {
     required this.title,
     required this.artist,
     this.imagePath,
+    this.videoPath,
     this.vttPath,
     this.vttNlPath,
     required this.folderName,
@@ -330,6 +333,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final potentialImage = File('${entity.path}/$baseName.jpg');
                 String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
+                final potentialVideo = File('${entity.path}/$baseName.mp4');
+                String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
+
                 final potentialVtt = File('${entity.path}/$baseName.vtt');
                 String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
 
@@ -341,6 +347,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   title: title,
                   artist: artist,
                   imagePath: imgPath,
+                  videoPath: videoPath,
                   vttPath: vttPath,
                   vttNlPath: vttNlPath,
                   folderName: folderName,
@@ -701,6 +708,12 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   List<SubtitleItem> _subtitlesNl = [];
   bool _showNlSubtitles = false;
 
+  // Schakelaar om video aan of uit te zetten (handig voor AirPin Lite vs Miracast)
+  bool _enableVideoPlayback = true;
+
+  VideoPlayerController? _videoController;
+  bool _isVideoInitialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -712,6 +725,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       if (mounted) {
         setState(() {
           _isPlaying = state.playing;
+          if (_videoController != null && _isVideoInitialized) {
+            if (_isPlaying && !_videoController!.value.isPlaying) {
+              _videoController!.play();
+            } else if (!_isPlaying && _videoController!.value.isPlaying) {
+              _videoController!.pause();
+            }
+          }
         });
       }
     });
@@ -726,9 +746,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     });
   }
 
+  @override
+  void dispose() {
+    _videoController?.dispose();
+    super.dispose();
+  }
+
   void _loadSongDetails() {
     _subtitles = [];
     _subtitlesNl = [];
+    
+    final oldController = _videoController;
+    _videoController = null;
+    _isVideoInitialized = false;
+    oldController?.dispose();
 
     final currentPath = _currentMediaItem?.id;
     if (currentPath == null) return;
@@ -738,6 +769,33 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       (s) => s.path == currentPath,
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
+
+    // Alleen video inlezen als de schakelaar aan staat én er een video pad is
+    if (_enableVideoPlayback && currentSong.videoPath != null) {
+      final videoFile = File(currentSong.videoPath!);
+      if (videoFile.existsSync()) {
+        final controller = VideoPlayerController.file(
+          videoFile,
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        );
+        _videoController = controller;
+        
+        controller.initialize().then((_) {
+          if (mounted && _videoController == controller) {
+            setState(() {
+              _isVideoInitialized = true;
+              controller.setLooping(true);
+              controller.setVolume(0.0);
+              if (_isPlaying) {
+                controller.play();
+              }
+            });
+          }
+        }).catchError((error) {
+          debugPrint("Fout bij video: $error");
+        });
+      }
+    }
 
     // VTT inlezen
     if (currentSong.vttPath != null) {
@@ -841,9 +899,24 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
     final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
-    // Altijd een nette poster of muzieknotatie (geen videoplayer die AirPin stoort)
     Widget buildMediaDisplay({required double size}) {
-      if (currentImagePath != null && File(currentImagePath).existsSync()) {
+      if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _videoController!.value.size.width,
+                height: _videoController!.value.size.height,
+                child: VideoPlayer(_videoController!),
+              ),
+            ),
+          ),
+        );
+      } else if (currentImagePath != null && File(currentImagePath).existsSync()) {
         return ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: Image.file(
@@ -877,19 +950,33 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
         actions: [
+          // Schakelknop voor Video Aan / Uit (Poster modus)
+          IconButton(
+            icon: Icon(
+              _enableVideoPlayback ? Icons.videocam : Icons.videocam_off,
+              color: _enableVideoPlayback ? Colors.green : Colors.grey,
+            ),
+            tooltip: _enableVideoPlayback ? 'Video aan (Zet uit bij AirPin)' : 'Poster modus aan (Ideaal voor AirPin)',
+            onPressed: () {
+              setState(() {
+                _enableVideoPlayback = !_enableVideoPlayback;
+                _loadSongDetails();
+              });
+            },
+          ),
           if (hasBothSubtitles)
             Padding(
-              padding: const EdgeInsets.only(right: 12.0),
+              padding: const EdgeInsets.only(right: 8.0),
               child: TextButton.icon(
                 style: TextButton.styleFrom(
                   backgroundColor: _showNlSubtitles ? Colors.green : Colors.grey[800],
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 ),
-                icon: const Icon(Icons.translate, size: 16),
+                icon: const Icon(Icons.translate, size: 14),
                 label: Text(
-                  _showNlSubtitles ? 'NL' : 'Origineel',
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  _showNlSubtitles ? 'NL' : 'Orig',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                 ),
                 onPressed: () {
                   setState(() {
