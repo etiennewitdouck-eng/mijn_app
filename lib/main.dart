@@ -748,6 +748,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     super.dispose();
   }
 
+  void _syncVideoToPosition(Duration position) {
+    final controller = _videoController;
+    if (controller == null || !_isVideoInitialized) return;
+
+    final videoDuration = controller.value.duration;
+    if (videoDuration <= Duration.zero) {
+      controller.seekTo(position);
+      return;
+    }
+
+    final targetMs = position.inMilliseconds % videoDuration.inMilliseconds;
+    controller.seekTo(Duration(milliseconds: targetMs));
+  }
+
   void _loadSongDetails() {
     _subtitles = [];
     _subtitlesNl = [];
@@ -781,6 +795,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               _isVideoInitialized = true;
               controller.setLooping(true);
               controller.setVolume(0.0);
+              _syncVideoToPosition(audioHandler._player.position);
               if (_isPlaying) {
                 controller.play();
               }
@@ -927,6 +942,56 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildPositionSlider({
+    required double horizontalPadding,
+    required double labelFontSize,
+  }) {
+    return StreamBuilder<Duration>(
+      stream: audioHandler.positionStream,
+      builder: (context, snapshotPosition) {
+        final position = snapshotPosition.data ?? Duration.zero;
+        return StreamBuilder<Duration?>(
+          stream: audioHandler.durationStream,
+          builder: (context, snapshotDuration) {
+            final duration = snapshotDuration.data ?? Duration.zero;
+
+            double maxVal = duration.inMilliseconds.toDouble();
+            double currentVal = position.inMilliseconds.toDouble();
+            if (maxVal <= 0) maxVal = 1.0;
+            if (currentVal > maxVal) currentVal = maxVal;
+
+            return Column(
+              children: [
+                Slider(
+                  min: 0.0,
+                  max: maxVal,
+                  value: currentVal,
+                  activeColor: Colors.green,
+                  inactiveColor: Colors.grey[700],
+                  onChanged: (value) {
+                    final target = Duration(milliseconds: value.toInt());
+                    audioHandler.seek(target);
+                    _syncVideoToPosition(target);
+                  },
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(_formatDuration(position), style: TextStyle(color: Colors.grey, fontSize: labelFontSize)),
+                      Text(_formatDuration(duration), style: TextStyle(color: Colors.grey, fontSize: labelFontSize)),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1127,48 +1192,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 6),
-                        StreamBuilder<Duration>(
-                          stream: audioHandler.positionStream,
-                          builder: (context, snapshotPosition) {
-                            final position = snapshotPosition.data ?? Duration.zero;
-                            return StreamBuilder<Duration?>(
-                              stream: audioHandler.durationStream,
-                              builder: (context, snapshotDuration) {
-                                final duration = snapshotDuration.data ?? Duration.zero;
-
-                                double maxVal = duration.inMilliseconds.toDouble();
-                                double currentVal = position.inMilliseconds.toDouble();
-                                if (maxVal <= 0) maxVal = 1.0;
-                                if (currentVal > maxVal) currentVal = maxVal;
-
-                                return Column(
-                                  children: [
-                                    Slider(
-                                      min: 0.0,
-                                      max: maxVal,
-                                      value: currentVal,
-                                      activeColor: Colors.green,
-                                      inactiveColor: Colors.grey[700],
-                                      onChanged: (value) {
-                                        audioHandler.seek(Duration(milliseconds: value.toInt()));
-                                      },
-                                    ),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                                          Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              },
-                            );
-                          },
-                        ),
+                        _buildPositionSlider(horizontalPadding: 8.0, labelFontSize: 10),
                       ],
                     ),
                   ),
@@ -1196,48 +1220,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 8),
-              StreamBuilder<Duration>(
-                stream: audioHandler.positionStream,
-                builder: (context, snapshotPosition) {
-                  final position = snapshotPosition.data ?? Duration.zero;
-                  return StreamBuilder<Duration?>(
-                    stream: audioHandler.durationStream,
-                    builder: (context, snapshotDuration) {
-                      final duration = snapshotDuration.data ?? Duration.zero;
-
-                      double maxVal = duration.inMilliseconds.toDouble();
-                      double currentVal = position.inMilliseconds.toDouble();
-                      if (maxVal <= 0) maxVal = 1.0;
-                      if (currentVal > maxVal) currentVal = maxVal;
-
-                      return Column(
-                        children: [
-                          Slider(
-                            min: 0.0,
-                            max: maxVal,
-                            value: currentVal,
-                            activeColor: Colors.green,
-                            inactiveColor: Colors.grey[700],
-                            onChanged: (value) {
-                              audioHandler.seek(Duration(milliseconds: value.toInt()));
-                            },
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(_formatDuration(position), style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                                Text(_formatDuration(duration), style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                },
-              ),
+              _buildPositionSlider(horizontalPadding: 16.0, labelFontSize: 11),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -1278,5 +1261,3 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
-
-
