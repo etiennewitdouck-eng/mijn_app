@@ -12,7 +12,7 @@ late MyAudioHandler audioHandler;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   audioHandler = await AudioService.init(
     builder: () => MyAudioHandler(),
     config: const AudioServiceConfig(
@@ -62,7 +62,7 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
 
   MyAudioHandler() {
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
-    
+
     _player.currentIndexStream.listen((index) {
       if (index != null && index < playlist.length) {
         currentIndex = index;
@@ -153,17 +153,17 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
 
   Future<void> toggleShuffle() async {
     isShuffled = !isShuffled;
-    
+
     if (isShuffled) {
       final currentSong = playlist.isNotEmpty && currentIndex < playlist.length ? playlist[currentIndex] : null;
       List<SongItem> shuffled = List.from(playlist);
       shuffled.shuffle(Random());
-      
+
       if (currentSong != null) {
         shuffled.remove(currentSong);
         shuffled.insert(0, currentSong);
       }
-      
+
       await setPlaylist(shuffled, 0, keepOriginalOrder: true);
     } else {
       final currentSong = playlist.isNotEmpty && currentIndex < playlist.length ? playlist[currentIndex] : null;
@@ -327,9 +327,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               if (subEntity is File && subEntity.path.toLowerCase().endsWith('.mp3')) {
                 final fileNameWithExt = subEntity.path.split('/').last;
                 final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-                
+
                 final (artist, title) = _parseSongName(baseName);
-                
+
                 final potentialImage = File('${entity.path}/$baseName.jpg');
                 String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
 
@@ -377,7 +377,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       });
 
       _updateCarPlayTemplate();
-
     } catch (e) {
       debugPrint("Fout bij algemeen laden: $e");
       setState(() {
@@ -399,7 +398,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         onPress: (complete, self) async {
           final allSongs = _folders.values.expand((x) => x).toList();
           final firstSongInFolderIndex = allSongs.indexWhere((s) => s.path == songsInFolder.first.path);
-          
+
           if (firstSongInFolderIndex != -1) {
             await audioHandler.setPlaylist(allSongs, firstSongInFolderIndex);
           }
@@ -544,7 +543,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     );
                   },
                 ),
-      
       bottomNavigationBar: _currentIndex != null
           ? GestureDetector(
               onTap: _openNowPlayingScreen,
@@ -571,7 +569,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         child: const Icon(Icons.music_note, color: Colors.white),
                       ),
                     const SizedBox(width: 10),
-                    
                     Expanded(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
@@ -592,14 +589,12 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         ],
                       ),
                     ),
-
                     IconButton(
                       icon: const Icon(Icons.skip_previous),
                       iconSize: 32,
                       color: Colors.white,
                       onPressed: () => audioHandler.skipToPrevious(),
                     ),
-
                     IconButton(
                       icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
                       iconSize: 42,
@@ -612,7 +607,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         }
                       },
                     ),
-
                     IconButton(
                       icon: const Icon(Icons.skip_next),
                       iconSize: 32,
@@ -648,14 +642,17 @@ class SpectrumVisualizer extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           crossAxisAlignment: CrossAxisAlignment.end,
-          children: List.generate(barCount, (index) => Container(
-            width: 4,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(2),
+          children: List.generate(
+            barCount,
+            (index) => Container(
+              width: 4,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[700],
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          )),
+          ),
         ),
       );
     }
@@ -674,7 +671,7 @@ class SpectrumVisualizer extends StatelessWidget {
               final timeFactor = positionMs / 180.0;
               final wave = sin(timeFactor + (index * 0.4));
               final cosWave = cos(timeFactor * 0.7 + (index * 0.3));
-              
+
               final multiplier = (index < 5) ? 24.0 : (index < 11 ? 18.0 : 12.0);
               final height = 6.0 + ((wave.abs() * 0.6 + cosWave.abs() * 0.4) * multiplier);
 
@@ -755,7 +752,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   void _loadSongDetails() {
     _subtitles = [];
     _subtitlesNl = [];
-    
+
     final oldController = _videoController;
     _videoController = null;
     _isVideoInitialized = false;
@@ -770,7 +767,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
 
-    // Alleen video laden als de schakelaar aan staat EN er een videobestand is
     if (_enableVideoPlayback && currentSong.videoPath != null) {
       final videoFile = File(currentSong.videoPath!);
       if (videoFile.existsSync()) {
@@ -779,7 +775,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
         );
         _videoController = controller;
-        
+
         controller.initialize().then((_) {
           if (mounted && _videoController == controller) {
             setState(() {
@@ -797,7 +793,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       }
     }
 
-    // VTT inlezen
     if (currentSong.vttPath != null) {
       final file = File(currentSong.vttPath!);
       if (file.existsSync()) {
@@ -844,7 +839,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         if (start != null && end != null) {
           if (textBuffer.isNotEmpty) textBuffer += "\n";
           textBuffer += line;
-          
+
           if (!subs.any((s) => s.start == start)) {
             subs.add(SubtitleItem(start: start!, end: end!, text: textBuffer));
           } else {
@@ -884,6 +879,58 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     return "$minutes:$seconds";
   }
 
+  Widget _buildSubtitleOverlay({
+    required bool hasAnySubtitle,
+    required double fontSize,
+  }) {
+    if (!hasAnySubtitle) return const SizedBox.shrink();
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: StreamBuilder<Duration>(
+        stream: audioHandler.positionStream,
+        builder: (context, snapshot) {
+          final position = snapshot.data ?? Duration.zero;
+          final activeList = (_showNlSubtitles && _subtitlesNl.isNotEmpty)
+              ? _subtitlesNl
+              : (_subtitles.isNotEmpty ? _subtitles : _subtitlesNl);
+          final activeSub = activeList.firstWhere(
+            (sub) => position >= sub.start && position <= sub.end,
+            orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
+          );
+
+          if (activeSub.text.trim().isEmpty) {
+            return const SizedBox.shrink();
+          }
+
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.72),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
+            ),
+            child: Text(
+              activeSub.text,
+              style: TextStyle(
+                fontSize: fontSize,
+                color: Colors.yellow,
+                fontWeight: FontWeight.w600,
+                shadows: const [
+                  Shadow(blurRadius: 3, color: Colors.black, offset: Offset(1, 1)),
+                ],
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentPath = _currentMediaItem?.id;
@@ -893,7 +940,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
     final currentImagePath = currentSong.imagePath;
-    
+
     final hasAnySubtitle = currentSong.vttPath != null || currentSong.vttNlPath != null;
     final hasBothSubtitles = currentSong.vttPath != null && currentSong.vttNlPath != null;
 
@@ -939,6 +986,26 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       }
     }
 
+    Widget buildPosterWithSubtitles({
+      required double size,
+      required double subtitleFontSize,
+    }) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            buildMediaDisplay(size: size),
+            _buildSubtitleOverlay(
+              hasAnySubtitle: hasAnySubtitle,
+              fontSize: subtitleFontSize,
+            ),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -950,7 +1017,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
         actions: [
-          // Schakelaar voor Video Aan / Uit
           IconButton(
             icon: Icon(
               _enableVideoPlayback ? Icons.videocam : Icons.videocam_off,
@@ -999,11 +1065,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   Expanded(
                     flex: 6,
                     child: Center(
-                      child: buildMediaDisplay(size: 300),
+                      child: buildPosterWithSubtitles(size: 300, subtitleFontSize: 13),
                     ),
                   ),
                   const SizedBox(width: 16),
-                  
                   Expanded(
                     flex: 5,
                     child: Column(
@@ -1042,13 +1107,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           ],
                         ),
                         const SizedBox(height: 4),
-
                         SpectrumVisualizer(
                           isPlaying: _isPlaying,
                           positionStream: audioHandler.positionStream,
                         ),
                         const SizedBox(height: 4),
-
                         Text(
                           _currentMediaItem?.title ?? '',
                           style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -1065,38 +1128,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 6),
-
-                        if (hasAnySubtitle)
-                          Container(
-                            constraints: const BoxConstraints(minHeight: 25, maxHeight: 45),
-                            alignment: Alignment.center,
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: StreamBuilder<Duration>(
-                              stream: audioHandler.positionStream,
-                              builder: (context, snapshot) {
-                                final position = snapshot.data ?? Duration.zero;
-                                final activeList = (_showNlSubtitles && _subtitlesNl.isNotEmpty) ? _subtitlesNl : (_subtitles.isNotEmpty ? _subtitles : _subtitlesNl);
-                                final activeSub = activeList.firstWhere(
-                                  (sub) => position >= sub.start && position <= sub.end,
-                                  orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
-                                );
-
-                                return Text(
-                                  activeSub.text,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.greenAccent,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                );
-                              },
-                            ),
-                          ),
-                        const SizedBox(height: 2),
-
                         StreamBuilder<Duration>(
                           stream: audioHandler.positionStream,
                           builder: (context, snapshotPosition) {
@@ -1105,7 +1136,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                               stream: audioHandler.durationStream,
                               builder: (context, snapshotDuration) {
                                 final duration = snapshotDuration.data ?? Duration.zero;
-                                
+
                                 double maxVal = duration.inMilliseconds.toDouble();
                                 double currentVal = position.inMilliseconds.toDouble();
                                 if (maxVal <= 0) maxVal = 1.0;
@@ -1145,15 +1176,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ],
               ),
             ] else ...[
-              buildMediaDisplay(size: 210),
+              buildPosterWithSubtitles(size: 210, subtitleFontSize: 14),
               const SizedBox(height: 14),
-
               SpectrumVisualizer(
                 isPlaying: _isPlaying,
                 positionStream: audioHandler.positionStream,
               ),
               const SizedBox(height: 14),
-
               Text(
                 _currentMediaItem?.title ?? '',
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -1167,41 +1196,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 style: const TextStyle(fontSize: 14, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
-
-              const SizedBox(height: 12),
-
-              if (hasAnySubtitle)
-                Container(
-                  constraints: const BoxConstraints(minHeight: 30, maxHeight: 60),
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                  child: StreamBuilder<Duration>(
-                    stream: audioHandler.positionStream,
-                    builder: (context, snapshot) {
-                      final position = snapshot.data ?? Duration.zero;
-                      final activeList = (_showNlSubtitles && _subtitlesNl.isNotEmpty) ? _subtitlesNl : (_subtitles.isNotEmpty ? _subtitles : _subtitlesNl);
-                      final activeSub = activeList.firstWhere(
-                        (sub) => position >= sub.start && position <= sub.end,
-                        orElse: () => SubtitleItem(start: Duration.zero, end: Duration.zero, text: ''),
-                      );
-
-                      return Text(
-                        activeSub.text,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Colors.greenAccent,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      );
-                    },
-                  ),
-                ),
-
               const SizedBox(height: 8),
-              
               StreamBuilder<Duration>(
                 stream: audioHandler.positionStream,
                 builder: (context, snapshotPosition) {
@@ -1210,7 +1205,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                     stream: audioHandler.durationStream,
                     builder: (context, snapshotDuration) {
                       final duration = snapshotDuration.data ?? Duration.zero;
-                      
+
                       double maxVal = duration.inMilliseconds.toDouble();
                       double currentVal = position.inMilliseconds.toDouble();
                       if (maxVal <= 0) maxVal = 1.0;
@@ -1244,9 +1239,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   );
                 },
               ),
-              
               const SizedBox(height: 16),
-              
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
