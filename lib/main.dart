@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
@@ -841,7 +840,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           textBuffer += line;
 
           if (!subs.any((s) => s.start == start)) {
-            subs.add(SubtitleItem(start: start!, end: end!, text: textBuffer));
+            subs.add(SubtitleItem(start: start, end: end, text: textBuffer));
           } else {
             subs.last = SubtitleItem(start: start, end: end, text: textBuffer);
           }
@@ -908,7 +907,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.72),
+              color: Colors.black.withValues(alpha: 0.72),
               borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
             ),
             child: Text(
@@ -1278,6 +1277,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       ),
     );
   }
-  
 }
+
 
