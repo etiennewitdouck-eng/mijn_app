@@ -6,6 +6,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_carplay/flutter_carplay.dart';
 import 'package:video_player/video_player.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 late MyAudioHandler audioHandler;
 
@@ -50,6 +51,18 @@ class SubtitleItem {
   final String text;
 
   SubtitleItem({required this.start, required this.end, required this.text});
+}
+
+class YouTubeLinkItem {
+  final String title;
+  final String url;
+  final String folderName;
+
+  YouTubeLinkItem({
+    required this.title,
+    required this.url,
+    required this.folderName,
+  });
 }
 
 class MyAudioHandler extends BaseAudioHandler with SeekHandler {
@@ -241,21 +254,33 @@ class SongItem {
   });
 }
 
+class _SubfolderData {
+  final List<SongItem> songs;
+  final List<YouTubeLinkItem> links;
+
+  _SubfolderData({
+    required this.songs,
+    required this.links,
+  });
+}
+
 class _FolderGroup {
   final String name;
   final List<SongItem> directSongs;
-  final Map<String, List<SongItem>> subfolders;
+  final List<YouTubeLinkItem> directLinks;
+  final Map<String, _SubfolderData> subfolders;
 
   _FolderGroup({
     required this.name,
     required this.directSongs,
+    required this.directLinks,
     required this.subfolders,
   });
 
   List<SongItem> get allSongsInGroup {
     return [
       ...directSongs,
-      for (final subSongs in subfolders.values) ...subSongs,
+      for (final sub in subfolders.values) ...sub.songs,
     ];
   }
 }
@@ -341,8 +366,47 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     });
   }
 
-  List<SongItem> _collectSongsInFolder(Directory dir, String labelName) {
-    List<SongItem> songs = [];
+  List<YouTubeLinkItem> _parseLinksFromTxtFile(File txtFile, String folderLabel) {
+    final List<YouTubeLinkItem> found = [];
+    try {
+      final lines = txtFile.readAsLinesSync();
+      final urlRegex = RegExp(r'(https?://\S+)');
+
+      for (var rawLine in lines) {
+        final line = rawLine.trim();
+        if (line.isEmpty) continue;
+
+        final match = urlRegex.firstMatch(line);
+        if (match == null) continue;
+
+        final url = match.group(1)!.trim();
+        String titlePart = line.substring(0, match.start).trim();
+        titlePart = titlePart.replaceAll(RegExp(r'[:|\-–—]+$'), '').trim();
+
+        if (titlePart.isEmpty) {
+          titlePart = txtFile.path.split('/').last.replaceAll(RegExp(r'\.txt$', caseSensitive: false), '');
+        }
+
+        found.add(
+          YouTubeLinkItem(
+            title: titlePart,
+            url: url,
+            folderName: folderLabel,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Fout bij inlezen tekstbestand ${txtFile.path}: $e");
+    }
+    return found;
+  }
+
+  void _collectSongsAndLinksRecursive(
+    Directory dir,
+    String labelName,
+    List<SongItem> targetSongs,
+    List<YouTubeLinkItem> targetLinks,
+  ) {
     try {
       final subEntities = dir.listSync();
       for (var subEntity in subEntities) {
@@ -367,7 +431,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           final potentialVttNl = File('$parentPath/$baseName.nl.vtt');
           String? vttNlPath = potentialVttNl.existsSync() ? potentialVttNl.path : null;
 
-          songs.add(SongItem(
+          targetSongs.add(SongItem(
             path: subEntity.path,
             title: title,
             artist: artist,
@@ -377,15 +441,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             vttNlPath: vttNlPath,
             folderName: labelName,
           ));
+        } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
+          targetLinks.addAll(_parseLinksFromTxtFile(subEntity, labelName));
         } else if (subEntity is Directory) {
-          songs.addAll(_collectSongsInFolder(subEntity, '$labelName / $name'));
+          _collectSongsAndLinksRecursive(subEntity, '$labelName / $name', targetSongs, targetLinks);
         }
       }
     } catch (e) {
       debugPrint("Fout bij lezen map ${dir.path}: $e");
     }
-    _sortSongs(songs);
-    return songs;
   }
 
   Future<void> _loadSongsFromFolders() async {
@@ -400,7 +464,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           if (folderName.startsWith('.')) continue;
 
           List<SongItem> directSongs = [];
-          Map<String, List<SongItem>> subfolders = {};
+          List<YouTubeLinkItem> directLinks = [];
+          Map<String, _SubfolderData> subfolders = {};
 
           try {
             final subEntities = entity.listSync();
@@ -435,10 +500,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   vttNlPath: vttNlPath,
                   folderName: folderName,
                 ));
+              } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
+                directLinks.addAll(_parseLinksFromTxtFile(subEntity, folderName));
               } else if (subEntity is Directory) {
-                final subSongs = _collectSongsInFolder(subEntity, '$folderName / $name');
-                if (subSongs.isNotEmpty) {
-                  subfolders[name] = subSongs;
+                List<SongItem> subSongs = [];
+                List<YouTubeLinkItem> subLinks = [];
+                _collectSongsAndLinksRecursive(subEntity, '$folderName / $name', subSongs, subLinks);
+                _sortSongs(subSongs);
+                if (subSongs.isNotEmpty || subLinks.isNotEmpty) {
+                  subfolders[name] = _SubfolderData(songs: subSongs, links: subLinks);
                 }
               }
             }
@@ -453,10 +523,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             for (final key in sortedSubfolderKeys) key: subfolders[key]!,
           };
 
-          if (directSongs.isNotEmpty || sortedSubfolders.isNotEmpty) {
+          if (directSongs.isNotEmpty || directLinks.isNotEmpty || sortedSubfolders.isNotEmpty) {
             loadedGroups[folderName] = _FolderGroup(
               name: folderName,
               directSongs: directSongs,
+              directLinks: directLinks,
               subfolders: sortedSubfolders,
             );
           }
@@ -476,6 +547,25 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  Future<void> _openYouTubeUrl(String urlString) async {
+    final uri = Uri.tryParse(urlString);
+    if (uri == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ongeldige link')),
+        );
+      }
+      return;
+    }
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Kon link niet openen: $urlString')),
+      );
     }
   }
 
@@ -504,20 +594,22 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
       for (final subEntry in group.subfolders.entries) {
         final subName = subEntry.key;
-        final subSongs = subEntry.value;
-        folderItems.add(
-          CPListItem(
-            text: '${group.name} / $subName',
-            detailText: '${subSongs.length} nummers (Tik om af te spelen)',
-            onPress: (complete, self) async {
-              final firstIndex = allSongs.indexWhere((s) => s.path == subSongs.first.path);
-              if (firstIndex != -1) {
-                await audioHandler.setPlaylist(allSongs, firstIndex);
-              }
-              complete();
-            },
-          ),
-        );
+        final subSongs = subEntry.value.songs;
+        if (subSongs.isNotEmpty) {
+          folderItems.add(
+            CPListItem(
+              text: '${group.name} / $subName',
+              detailText: '${subSongs.length} nummers (Tik om af te spelen)',
+              onPress: (complete, self) async {
+                final firstIndex = allSongs.indexWhere((s) => s.path == subSongs.first.path);
+                if (firstIndex != -1) {
+                  await audioHandler.setPlaylist(allSongs, firstIndex);
+                }
+                complete();
+              },
+            ),
+          );
+        }
       }
     }
 
@@ -550,6 +642,28 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       MaterialPageRoute(
         builder: (context) => const NowPlayingScreen(),
       ),
+    );
+  }
+
+  Widget _buildLinkTile(YouTubeLinkItem link) {
+    return ListTile(
+      contentPadding: const EdgeInsets.only(left: 36, right: 16),
+      leading: const Icon(Icons.ondemand_video, color: Colors.redAccent, size: 30),
+      title: Text(
+        link.title,
+        style: const TextStyle(
+          color: Colors.amberAccent,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        link.url,
+        style: const TextStyle(color: Colors.grey, fontSize: 11),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: const Icon(Icons.open_in_new, color: Colors.grey, size: 18),
+      onTap: () => _openYouTubeUrl(link.url),
     );
   }
 
@@ -666,7 +780,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                       children: [
                         ...group.subfolders.entries.map((subEntry) {
                           final subName = subEntry.key;
-                          final subSongs = subEntry.value;
+                          final subData = subEntry.value;
+                          final subSongs = subData.songs;
+                          final subLinks = subData.links;
                           final subShuffleKey = 'sub:$folderName/$subName';
                           final isSubShuffled = _activeShuffledKey == subShuffleKey;
 
@@ -682,38 +798,43 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                                     ),
                                   ),
-                                  IconButton(
-                                    icon: Icon(
-                                      Icons.shuffle,
-                                      size: 18,
-                                      color: isSubShuffled ? Colors.green : Colors.grey,
+                                  if (subSongs.isNotEmpty)
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.shuffle,
+                                        size: 18,
+                                        color: isSubShuffled ? Colors.green : Colors.grey,
+                                      ),
+                                      tooltip: isSubShuffled ? 'Zet submap shuffle uit' : 'Shuffle alleen deze submap',
+                                      onPressed: () async {
+                                        if (isSubShuffled) {
+                                          setState(() {
+                                            _activeShuffledKey = null;
+                                          });
+                                          await audioHandler.restoreOriginalOrder(subSongs);
+                                        } else {
+                                          await audioHandler.playFolderShuffled(subSongs);
+                                          setState(() {
+                                            _activeShuffledKey = subShuffleKey;
+                                            _isShuffled = false;
+                                          });
+                                        }
+                                      },
                                     ),
-                                    tooltip: isSubShuffled ? 'Zet submap shuffle uit' : 'Shuffle alleen deze submap',
-                                    onPressed: () async {
-                                      if (isSubShuffled) {
-                                        setState(() {
-                                          _activeShuffledKey = null;
-                                        });
-                                        await audioHandler.restoreOriginalOrder(subSongs);
-                                      } else {
-                                        await audioHandler.playFolderShuffled(subSongs);
-                                        setState(() {
-                                          _activeShuffledKey = subShuffleKey;
-                                          _isShuffled = false;
-                                        });
-                                      }
-                                    },
-                                  ),
                                 ],
                               ),
                               subtitle: Text(
-                                '${subSongs.length} nummers',
+                                '${subSongs.length} nummers${subLinks.isNotEmpty ? ' · ${subLinks.length} link(s)' : ''}',
                                 style: const TextStyle(color: Colors.grey, fontSize: 11),
                               ),
-                              children: subSongs.map((song) => _buildSongTile(song, allSongs)).toList(),
+                              children: [
+                                ...subLinks.map((link) => _buildLinkTile(link)),
+                                ...subSongs.map((song) => _buildSongTile(song, allSongs)),
+                              ],
                             ),
                           );
                         }),
+                        ...group.directLinks.map((link) => _buildLinkTile(link)),
                         ...group.directSongs.map((song) => _buildSongTile(song, allSongs)),
                       ],
                     );
@@ -1535,3 +1656,4 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
