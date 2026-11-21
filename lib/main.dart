@@ -550,9 +550,38 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     }
   }
 
+  Uri _normalizeToMobileYouTubeUri(String urlString) {
+    final parsed = Uri.parse(urlString.trim());
+
+    if (parsed.host == 'youtu.be') {
+      final videoId = parsed.pathSegments.isNotEmpty ? parsed.pathSegments.first : '';
+      final queryParams = Map<String, String>.from(parsed.queryParameters);
+      if (videoId.isNotEmpty && !queryParams.containsKey('v')) {
+        queryParams['v'] = videoId;
+      }
+      return Uri(
+        scheme: 'https',
+        host: 'm.youtube.com',
+        path: '/watch',
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+    }
+
+    if (parsed.host == 'www.youtube.com' || parsed.host == 'youtube.com') {
+      return parsed.replace(
+        scheme: 'https',
+        host: 'm.youtube.com',
+      );
+    }
+
+    return parsed;
+  }
+
   Future<void> _openYouTubeUrl(String urlString) async {
-    final uri = Uri.tryParse(urlString);
-    if (uri == null) {
+    Uri uri;
+    try {
+      uri = _normalizeToMobileYouTubeUri(urlString);
+    } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ongeldige link')),
@@ -561,7 +590,10 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       return;
     }
 
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
     if (!launched && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Kon link niet openen: $urlString')),
@@ -1656,4 +1688,3 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
-
