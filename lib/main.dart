@@ -664,7 +664,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                         style: const TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                       children: [
-                        ...group.directSongs.map((song) => _buildSongTile(song, allSongs)),
                         ...group.subfolders.entries.map((subEntry) {
                           final subName = subEntry.key;
                           final subSongs = subEntry.value;
@@ -715,6 +714,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                             ),
                           );
                         }),
+                        ...group.directSongs.map((song) => _buildSongTile(song, allSongs)),
                       ],
                     );
                   },
@@ -1438,4 +1438,3 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
-
