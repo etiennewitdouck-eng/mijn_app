@@ -880,6 +880,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   List<SubtitleItem> _subtitles = [];
   List<SubtitleItem> _subtitlesNl = [];
   bool _showNlSubtitles = false;
+  bool _isFullscreen = false;
 
   // Schakelaar voor video aan/uit (Aan = MiraScreen / lokaal, Uit = AirPin Lite poster modus)
   bool _enableVideoPlayback = true;
@@ -1073,6 +1074,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   Widget _buildSubtitleOverlay({
     required bool hasAnySubtitle,
     required double fontSize,
+    double borderRadius = 14,
   }) {
     if (!hasAnySubtitle) return const SizedBox.shrink();
 
@@ -1097,10 +1099,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           }
 
           return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.72),
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(14)),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(borderRadius)),
             ),
             child: Text(
               activeSub.text,
@@ -1172,6 +1174,64 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 
+  Widget _buildMediaBox({
+    required double width,
+    required double height,
+    required double subtitleFontSize,
+    required bool hasAnySubtitle,
+    String? currentImagePath,
+    double borderRadius = 14,
+  }) {
+    Widget mediaChild;
+    if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
+      mediaChild = SizedBox(
+        width: width,
+        height: height,
+        child: FittedBox(
+          fit: BoxFit.cover,
+          child: SizedBox(
+            width: _videoController!.value.size.width,
+            height: _videoController!.value.size.height,
+            child: VideoPlayer(_videoController!),
+          ),
+        ),
+      );
+    } else if (currentImagePath != null && File(currentImagePath).existsSync()) {
+      mediaChild = Image.file(
+        File(currentImagePath),
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+      );
+    } else {
+      mediaChild = Container(
+        width: width,
+        height: height,
+        color: Colors.grey[800],
+        child: const Icon(Icons.music_note, size: 70, color: Colors.white),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            mediaChild,
+            _buildSubtitleOverlay(
+              hasAnySubtitle: hasAnySubtitle,
+              fontSize: subtitleFontSize,
+              borderRadius: borderRadius,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentPath = _currentMediaItem?.id;
@@ -1185,67 +1245,79 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final hasAnySubtitle = currentSong.vttPath != null || currentSong.vttNlPath != null;
     final hasBothSubtitles = currentSong.vttPath != null && currentSong.vttNlPath != null;
 
-    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
-
-    Widget buildMediaDisplay({required double size}) {
-      if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _videoController!.value.size.width,
-                height: _videoController!.value.size.height,
-                child: VideoPlayer(_videoController!),
-              ),
-            ),
+    if (_isFullscreen) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  Center(
+                    child: _buildMediaBox(
+                      width: constraints.maxWidth,
+                      height: constraints.maxHeight,
+                      subtitleFontSize: 18,
+                      hasAnySubtitle: hasAnySubtitle,
+                      currentImagePath: currentImagePath,
+                      borderRadius: 0,
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Row(
+                      children: [
+                        if (hasBothSubtitles)
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.black54,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: TextButton.icon(
+                              style: TextButton.styleFrom(
+                                backgroundColor: _showNlSubtitles ? Colors.green : Colors.black54,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              ),
+                              icon: const Icon(Icons.translate, size: 15),
+                              label: Text(
+                                _showNlSubtitles ? 'NL' : 'Orig',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  _showNlSubtitles = !_showNlSubtitles;
+                                });
+                              },
+                            ),
+                          ),
+                        CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                            tooltip: 'Sluit fullscreen',
+                            onPressed: () {
+                              setState(() {
+                                _isFullscreen = false;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-        );
-      } else if (currentImagePath != null && File(currentImagePath).existsSync()) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Image.file(
-            File(currentImagePath),
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-          ),
-        );
-      } else {
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            color: Colors.grey[800],
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: const Icon(Icons.music_note, size: 70, color: Colors.white),
-        );
-      }
-    }
-
-    Widget buildPosterWithSubtitles({
-      required double size,
-      required double subtitleFontSize,
-    }) {
-      return SizedBox(
-        width: size,
-        height: size,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            buildMediaDisplay(size: size),
-            _buildSubtitleOverlay(
-              hasAnySubtitle: hasAnySubtitle,
-              fontSize: subtitleFontSize,
-            ),
-          ],
         ),
       );
     }
+
+    final isLandscape = MediaQuery.of(context).orientation == Orientation.landscape;
 
     return Scaffold(
       appBar: AppBar(
@@ -1268,6 +1340,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               setState(() {
                 _enableVideoPlayback = !_enableVideoPlayback;
                 _loadSongDetails();
+              });
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.fullscreen),
+            tooltip: 'Fullscreen poster / video',
+            onPressed: () {
+              setState(() {
+                _isFullscreen = true;
               });
             },
           ),
@@ -1306,7 +1387,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   Expanded(
                     flex: 6,
                     child: Center(
-                      child: buildPosterWithSubtitles(size: 300, subtitleFontSize: 13),
+                      child: _buildMediaBox(
+                        width: 360,
+                        height: 240,
+                        subtitleFontSize: 14,
+                        hasAnySubtitle: hasAnySubtitle,
+                        currentImagePath: currentImagePath,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -1376,7 +1463,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ],
               ),
             ] else ...[
-              buildPosterWithSubtitles(size: 210, subtitleFontSize: 14),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return _buildMediaBox(
+                    width: constraints.maxWidth,
+                    height: 250,
+                    subtitleFontSize: 15,
+                    hasAnySubtitle: hasAnySubtitle,
+                    currentImagePath: currentImagePath,
+                  );
+                },
+              ),
               const SizedBox(height: 14),
               SpectrumVisualizer(
                 isPlaying: _isPlaying,
