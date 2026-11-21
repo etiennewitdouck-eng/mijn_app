@@ -1376,7 +1376,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: isLandscape ? 4.0 : 16.0),
+        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: isLandscape ? 4.0 : 12.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -1385,20 +1385,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Expanded(
-                    flex: 6,
+                    flex: 7,
                     child: Center(
                       child: _buildMediaBox(
-                        width: 360,
-                        height: 240,
+                        width: 400,
+                        height: 320,
                         subtitleFontSize: 14,
                         hasAnySubtitle: hasAnySubtitle,
                         currentImagePath: currentImagePath,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
-                    flex: 5,
+                    flex: 4,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -1407,14 +1407,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                           children: [
                             IconButton(
                               icon: const Icon(Icons.skip_previous),
-                              iconSize: 38,
+                              iconSize: 36,
                               color: Colors.white,
                               onPressed: () => audioHandler.skipToPrevious(),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             IconButton(
                               icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_filled),
-                              iconSize: 56,
+                              iconSize: 52,
                               color: Colors.green,
                               onPressed: () async {
                                 if (_isPlaying) {
@@ -1425,10 +1425,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                                 setState(() {});
                               },
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             IconButton(
                               icon: const Icon(Icons.skip_next),
-                              iconSize: 38,
+                              iconSize: 36,
                               color: Colors.white,
                               onPressed: () => audioHandler.skipToNext(),
                             ),
@@ -1442,7 +1442,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         const SizedBox(height: 4),
                         Text(
                           _currentMediaItem?.title ?? '',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -1467,19 +1467,19 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 builder: (context, constraints) {
                   return _buildMediaBox(
                     width: constraints.maxWidth,
-                    height: 250,
+                    height: 330,
                     subtitleFontSize: 15,
                     hasAnySubtitle: hasAnySubtitle,
                     currentImagePath: currentImagePath,
                   );
                 },
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               SpectrumVisualizer(
                 isPlaying: _isPlaying,
                 positionStream: audioHandler.positionStream,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 12),
               Text(
                 _currentMediaItem?.title ?? '',
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
@@ -1493,9 +1493,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 style: const TextStyle(fontSize: 14, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               _buildPositionSlider(horizontalPadding: 16.0, labelFontSize: 11),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
