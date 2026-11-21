@@ -308,6 +308,58 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return (artist, title);
   }
 
+  void _scanDirectory({
+    required Directory dir,
+    required String displayFolderName,
+    required List<SongItem> collectedSongs,
+  }) {
+    try {
+      final subEntities = dir.listSync();
+      for (var subEntity in subEntities) {
+        final name = subEntity.path.split('/').last;
+        if (name.startsWith('.')) continue;
+
+        if (subEntity is Directory) {
+          _scanDirectory(
+            dir: subEntity,
+            displayFolderName: '$displayFolderName / $name',
+            collectedSongs: collectedSongs,
+          );
+        } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.mp3')) {
+          final baseName = name.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
+          final parentPath = subEntity.parent.path;
+
+          final (artist, title) = _parseSongName(baseName);
+
+          final potentialImage = File('$parentPath/$baseName.jpg');
+          String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
+
+          final potentialVideo = File('$parentPath/$baseName.mp4');
+          String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
+
+          final potentialVtt = File('$parentPath/$baseName.vtt');
+          String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
+
+          final potentialVttNl = File('$parentPath/$baseName.nl.vtt');
+          String? vttNlPath = potentialVttNl.existsSync() ? potentialVttNl.path : null;
+
+          collectedSongs.add(SongItem(
+            path: subEntity.path,
+            title: title,
+            artist: artist,
+            imagePath: imgPath,
+            videoPath: videoPath,
+            vttPath: vttPath,
+            vttNlPath: vttNlPath,
+            folderName: displayFolderName,
+          ));
+        }
+      }
+    } catch (e) {
+      debugPrint("Fout bij lezen map ${dir.path}: $e");
+    }
+  }
+
   Future<void> _loadSongsFromFolders() async {
     try {
       Map<String, List<SongItem>> loadedFolders = {};
@@ -320,42 +372,11 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           if (folderName.startsWith('.')) continue;
 
           List<SongItem> folderSongs = [];
-          try {
-            final subFiles = entity.listSync();
-            for (var subEntity in subFiles) {
-              if (subEntity is File && subEntity.path.toLowerCase().endsWith('.mp3')) {
-                final fileNameWithExt = subEntity.path.split('/').last;
-                final baseName = fileNameWithExt.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
-
-                final (artist, title) = _parseSongName(baseName);
-
-                final potentialImage = File('${entity.path}/$baseName.jpg');
-                String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
-
-                final potentialVideo = File('${entity.path}/$baseName.mp4');
-                String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
-
-                final potentialVtt = File('${entity.path}/$baseName.vtt');
-                String? vttPath = potentialVtt.existsSync() ? potentialVtt.path : null;
-
-                final potentialVttNl = File('${entity.path}/$baseName.nl.vtt');
-                String? vttNlPath = potentialVttNl.existsSync() ? potentialVttNl.path : null;
-
-                folderSongs.add(SongItem(
-                  path: subEntity.path,
-                  title: title,
-                  artist: artist,
-                  imagePath: imgPath,
-                  videoPath: videoPath,
-                  vttPath: vttPath,
-                  vttNlPath: vttNlPath,
-                  folderName: folderName,
-                ));
-              }
-            }
-          } catch (e) {
-            debugPrint("Fout bij lezen map $folderName: $e");
-          }
+          _scanDirectory(
+            dir: entity,
+            displayFolderName: folderName,
+            collectedSongs: folderSongs,
+          );
 
           if (folderSongs.isNotEmpty) {
             folderSongs.sort((a, b) {
