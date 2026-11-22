@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
@@ -1266,6 +1267,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _showNlSubtitles = false;
   bool _isFullscreen = false;
   bool _fitCoverImages = false;
+  double _photoVerticalOffset = 0.0; // -1.0 = bovenkant, 0.0 = midden, +1.0 = onderkant
 
   // Schakelaar voor video aan/uit (Aan = MiraScreen / lokaal, Uit = AirPin Lite poster modus)
   bool _enableVideoPlayback = true;
@@ -1330,6 +1332,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     } else {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     }
+  }
+
+  void _adjustVerticalPan(double delta) {
+    if (!_fitCoverImages) return;
+    setState(() {
+      _photoVerticalOffset = (_photoVerticalOffset + delta).clamp(-1.0, 1.0);
+    });
+  }
+
+  void _resetVerticalPan() {
+    if (_photoVerticalOffset == 0.0) return;
+    setState(() {
+      _photoVerticalOffset = 0.0;
+    });
   }
 
   void _startSlideshowTimerIfNeeded() {
@@ -1635,6 +1651,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final safePhotoIndex = hasSlideshow ? (_photoIndex % _slideshowPhotos.length) : 0;
     final activePhotoPath = hasSlideshow ? _slideshowPhotos[safePhotoIndex] : null;
     final BoxFit imageFit = _fitCoverImages ? BoxFit.cover : BoxFit.contain;
+    final Alignment imageAlignment =
+        _fitCoverImages ? Alignment(0.0, _photoVerticalOffset) : Alignment.center;
 
     Widget mediaChild;
     if (hasSlideshow && activePhotoPath != null && File(activePhotoPath).existsSync()) {
@@ -1646,6 +1664,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           width: width,
           height: height,
           fit: imageFit,
+          alignment: imageAlignment,
         ),
       );
     } else if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
@@ -1669,6 +1688,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           width: width,
           height: height,
           fit: imageFit,
+          alignment: imageAlignment,
         ),
       );
     } else {
@@ -1716,6 +1736,37 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 
+  Widget _buildFullscreenInteractiveMedia({
+    required double width,
+    required double height,
+    required bool hasAnySubtitle,
+    String? currentImagePath,
+  }) {
+    return Listener(
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent && _fitCoverImages) {
+          _adjustVerticalPan((event.scrollDelta.dy / 240.0).clamp(-0.35, 0.35));
+        }
+      },
+      child: GestureDetector(
+        onVerticalDragUpdate: _fitCoverImages
+            ? (details) {
+                final denom = height > 0 ? height : 400.0;
+                _adjustVerticalPan(-(details.delta.dy / (denom * 0.4)));
+              }
+            : null,
+        child: _buildMediaBox(
+          width: width,
+          height: height,
+          subtitleFontSize: 18,
+          hasAnySubtitle: hasAnySubtitle,
+          currentImagePath: currentImagePath,
+          borderRadius: 0,
+        ),
+      ),
+    );
+  }
+
   Widget _buildFitToggleButton({bool compact = false}) {
     return TextButton.icon(
       style: TextButton.styleFrom(
@@ -1731,6 +1782,9 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       onPressed: () {
         setState(() {
           _fitCoverImages = !_fitCoverImages;
+          if (!_fitCoverImages) {
+            _photoVerticalOffset = 0.0;
+          }
         });
       },
     );
@@ -1800,15 +1854,28 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             fit: StackFit.expand,
             children: [
               Center(
-                child: _buildMediaBox(
+                child: _buildFullscreenInteractiveMedia(
                   width: screenSize.width,
                   height: screenSize.height,
-                  subtitleFontSize: 18,
                   hasAnySubtitle: hasAnySubtitle,
                   currentImagePath: currentImagePath,
-                  borderRadius: 0,
                 ),
               ),
+              if (_fitCoverImages && _photoVerticalOffset != 0.0)
+                Positioned(
+                  top: 16,
+                  left: 16,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.black54,
+                      foregroundColor: Colors.cyanAccent,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    ),
+                    icon: const Icon(Icons.center_focus_strong, size: 15),
+                    label: const Text('Centreer', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: _resetVerticalPan,
+                  ),
+                ),
               if (hasSlideshow)
                 Positioned(
                   bottom: 16,
@@ -2092,4 +2159,5 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
 
