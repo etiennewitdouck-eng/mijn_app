@@ -343,6 +343,15 @@ class MusicPlayerPage extends StatefulWidget {
 }
 
 class _MusicPlayerPageState extends State<MusicPlayerPage> {
+  static const Set<String> _imageExtensions = {
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+    '.gif',
+    '.bmp',
+  };
+
   Map<String, _FolderGroup> _folderGroups = {};
   bool _isLoading = true;
   int? _currentIndex;
@@ -378,6 +387,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
   }
 
   bool _isPhotoFolderName(String name) => name.toLowerCase() == '_foto';
+
+  bool _isSupportedImagePath(String path) {
+    final lower = path.toLowerCase();
+    return _imageExtensions.any((ext) => lower.endsWith(ext));
+  }
+
+  String? _findCoverImagePath(String parentPath, String baseName) {
+    for (final ext in _imageExtensions) {
+      final candidate = File('$parentPath/$baseName$ext');
+      if (candidate.existsSync()) {
+        return candidate.path;
+      }
+    }
+    return null;
+  }
 
   List<SongItem> _getAllSongs() {
     return [
@@ -440,16 +464,16 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return found;
   }
 
-  void _collectJpgsRecursive(Directory dir, List<String> targetPhotos) {
+  void _collectImagesRecursive(Directory dir, List<String> targetPhotos) {
     try {
       for (var entity in dir.listSync()) {
         final name = entity.path.split('/').last;
         if (name.startsWith('.')) continue;
 
-        if (entity is File && entity.path.toLowerCase().endsWith('.jpg')) {
+        if (entity is File && _isSupportedImagePath(entity.path)) {
           targetPhotos.add(entity.path);
         } else if (entity is Directory) {
-          _collectJpgsRecursive(entity, targetPhotos);
+          _collectImagesRecursive(entity, targetPhotos);
         }
       }
     } catch (e) {
@@ -476,8 +500,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
 
           final (artist, title) = _parseSongName(baseName);
 
-          final potentialImage = File('$parentPath/$baseName.jpg');
-          String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
+          final String? imgPath = _findCoverImagePath(parentPath, baseName);
 
           final potentialVideo = File('$parentPath/$baseName.mp4');
           String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
@@ -500,13 +523,13 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           ));
         } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
           targetLinks.addAll(_parseLinksFromTxtFile(subEntity, labelName));
-        } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.jpg')) {
+        } else if (subEntity is File && _isSupportedImagePath(subEntity.path)) {
           if (_isPhotoFolderName(dir.path.split('/').last)) {
             targetPhotos.add(subEntity.path);
           }
         } else if (subEntity is Directory) {
           if (_isPhotoFolderName(name)) {
-            _collectJpgsRecursive(subEntity, targetPhotos);
+            _collectImagesRecursive(subEntity, targetPhotos);
           }
           _collectFolderContentsRecursive(
             subEntity,
@@ -540,7 +563,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           Map<String, _SubfolderData> subfolders = {};
 
           if (isPhotoMainFolder) {
-            _collectJpgsRecursive(entity, directPhotos);
+            _collectImagesRecursive(entity, directPhotos);
           }
 
           try {
@@ -554,8 +577,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final parentPath = subEntity.parent.path;
                 final (artist, title) = _parseSongName(baseName);
 
-                final potentialImage = File('$parentPath/$baseName.jpg');
-                String? imgPath = potentialImage.existsSync() ? potentialImage.path : null;
+                final String? imgPath = _findCoverImagePath(parentPath, baseName);
 
                 final potentialVideo = File('$parentPath/$baseName.mp4');
                 String? videoPath = potentialVideo.existsSync() ? potentialVideo.path : null;
@@ -578,7 +600,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 ));
               } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
                 directLinks.addAll(_parseLinksFromTxtFile(subEntity, folderName));
-              } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.jpg')) {
+              } else if (subEntity is File && _isSupportedImagePath(subEntity.path)) {
                 if (isPhotoMainFolder) {
                   directPhotos.add(subEntity.path);
                 }
@@ -588,7 +610,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 List<YouTubeLinkItem> subLinks = [];
                 List<String> subPhotos = [];
                 if (isPhotoSub) {
-                  _collectJpgsRecursive(subEntity, subPhotos);
+                  _collectImagesRecursive(subEntity, subPhotos);
                 }
                 _collectFolderContentsRecursive(
                   subEntity,
