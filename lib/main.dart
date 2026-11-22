@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -241,6 +242,7 @@ class SongItem {
   final String? vttPath;
   final String? vttNlPath;
   final String folderName;
+  final List<String> slideshowPhotos;
 
   SongItem({
     required this.path,
@@ -251,16 +253,21 @@ class SongItem {
     this.vttPath,
     this.vttNlPath,
     required this.folderName,
+    this.slideshowPhotos = const [],
   });
 }
 
 class _SubfolderData {
   final List<SongItem> songs;
   final List<YouTubeLinkItem> links;
+  final List<String> photos;
+  final bool isPhotoFolder;
 
   _SubfolderData({
     required this.songs,
     required this.links,
+    required this.photos,
+    required this.isPhotoFolder,
   });
 }
 
@@ -268,20 +275,50 @@ class _FolderGroup {
   final String name;
   final List<SongItem> directSongs;
   final List<YouTubeLinkItem> directLinks;
+  final List<String> directPhotos;
+  final bool isPhotoFolder;
   final Map<String, _SubfolderData> subfolders;
 
   _FolderGroup({
     required this.name,
     required this.directSongs,
     required this.directLinks,
+    required this.directPhotos,
+    required this.isPhotoFolder,
     required this.subfolders,
   });
 
-  List<SongItem> get allSongsInGroup {
+  List<String> get allGroupPhotos {
     return [
-      ...directSongs,
-      for (final sub in subfolders.values) ...sub.songs,
+      ...directPhotos,
+      for (final sub in subfolders.values) ...sub.photos,
     ];
+  }
+
+  List<SongItem> get allSongsInGroup {
+    final groupPhotos = allGroupPhotos;
+    return [
+      ...directSongs.map((s) => _withSlideshow(s, groupPhotos)),
+      for (final sub in subfolders.values)
+        ...sub.songs.map(
+          (s) => _withSlideshow(s, sub.photos.isNotEmpty ? sub.photos : groupPhotos),
+        ),
+    ];
+  }
+
+  static SongItem _withSlideshow(SongItem song, List<String> photos) {
+    if (photos.isEmpty) return song;
+    return SongItem(
+      path: song.path,
+      title: song.title,
+      artist: song.artist,
+      imagePath: song.imagePath,
+      videoPath: song.videoPath,
+      vttPath: song.vttPath,
+      vttNlPath: song.vttNlPath,
+      folderName: song.folderName,
+      slideshowPhotos: photos,
+    );
   }
 }
 
@@ -339,6 +376,8 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
       }
     });
   }
+
+  bool _isPhotoFolderName(String name) => name.toLowerCase() == '_foto';
 
   List<SongItem> _getAllSongs() {
     return [
@@ -401,11 +440,29 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return found;
   }
 
-  void _collectSongsAndLinksRecursive(
+  void _collectJpgsRecursive(Directory dir, List<String> targetPhotos) {
+    try {
+      for (var entity in dir.listSync()) {
+        final name = entity.path.split('/').last;
+        if (name.startsWith('.')) continue;
+
+        if (entity is File && entity.path.toLowerCase().endsWith('.jpg')) {
+          targetPhotos.add(entity.path);
+        } else if (entity is Directory) {
+          _collectJpgsRecursive(entity, targetPhotos);
+        }
+      }
+    } catch (e) {
+      debugPrint("Fout bij scannen foto's in ${dir.path}: $e");
+    }
+  }
+
+  void _collectFolderContentsRecursive(
     Directory dir,
     String labelName,
     List<SongItem> targetSongs,
     List<YouTubeLinkItem> targetLinks,
+    List<String> targetPhotos,
   ) {
     try {
       final subEntities = dir.listSync();
@@ -443,8 +500,21 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           ));
         } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
           targetLinks.addAll(_parseLinksFromTxtFile(subEntity, labelName));
+        } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.jpg')) {
+          if (_isPhotoFolderName(dir.path.split('/').last)) {
+            targetPhotos.add(subEntity.path);
+          }
         } else if (subEntity is Directory) {
-          _collectSongsAndLinksRecursive(subEntity, '$labelName / $name', targetSongs, targetLinks);
+          if (_isPhotoFolderName(name)) {
+            _collectJpgsRecursive(subEntity, targetPhotos);
+          }
+          _collectFolderContentsRecursive(
+            subEntity,
+            '$labelName / $name',
+            targetSongs,
+            targetLinks,
+            targetPhotos,
+          );
         }
       }
     } catch (e) {
@@ -463,9 +533,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           final folderName = entity.path.split('/').last;
           if (folderName.startsWith('.')) continue;
 
+          final isPhotoMainFolder = _isPhotoFolderName(folderName);
           List<SongItem> directSongs = [];
           List<YouTubeLinkItem> directLinks = [];
+          List<String> directPhotos = [];
           Map<String, _SubfolderData> subfolders = {};
+
+          if (isPhotoMainFolder) {
+            _collectJpgsRecursive(entity, directPhotos);
+          }
 
           try {
             final subEntities = entity.listSync();
@@ -502,13 +578,34 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 ));
               } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
                 directLinks.addAll(_parseLinksFromTxtFile(subEntity, folderName));
+              } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.jpg')) {
+                if (isPhotoMainFolder) {
+                  directPhotos.add(subEntity.path);
+                }
               } else if (subEntity is Directory) {
+                final isPhotoSub = _isPhotoFolderName(name);
                 List<SongItem> subSongs = [];
                 List<YouTubeLinkItem> subLinks = [];
-                _collectSongsAndLinksRecursive(subEntity, '$folderName / $name', subSongs, subLinks);
+                List<String> subPhotos = [];
+                if (isPhotoSub) {
+                  _collectJpgsRecursive(subEntity, subPhotos);
+                }
+                _collectFolderContentsRecursive(
+                  subEntity,
+                  '$folderName / $name',
+                  subSongs,
+                  subLinks,
+                  subPhotos,
+                );
                 _sortSongs(subSongs);
-                if (subSongs.isNotEmpty || subLinks.isNotEmpty) {
-                  subfolders[name] = _SubfolderData(songs: subSongs, links: subLinks);
+                subPhotos.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+                if (subSongs.isNotEmpty || subLinks.isNotEmpty || subPhotos.isNotEmpty) {
+                  subfolders[name] = _SubfolderData(
+                    songs: subSongs,
+                    links: subLinks,
+                    photos: subPhotos,
+                    isPhotoFolder: isPhotoSub,
+                  );
                 }
               }
             }
@@ -517,17 +614,24 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           }
 
           _sortSongs(directSongs);
+          directPhotos.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
           final sortedSubfolderKeys = subfolders.keys.toList()
             ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
           final sortedSubfolders = {
             for (final key in sortedSubfolderKeys) key: subfolders[key]!,
           };
 
-          if (directSongs.isNotEmpty || directLinks.isNotEmpty || sortedSubfolders.isNotEmpty) {
+          if (directSongs.isNotEmpty ||
+              directLinks.isNotEmpty ||
+              directPhotos.isNotEmpty ||
+              sortedSubfolders.isNotEmpty) {
             loadedGroups[folderName] = _FolderGroup(
               name: folderName,
               directSongs: directSongs,
               directLinks: directLinks,
+              directPhotos: directPhotos,
+              isPhotoFolder: isPhotoMainFolder,
               subfolders: sortedSubfolders,
             );
           }
@@ -668,12 +772,54 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     });
   }
 
-  void _openNowPlayingScreen() {
+  void _openNowPlayingScreen({
+    List<String> slideshowPhotos = const [],
+    String? slideshowTitle,
+  }) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const NowPlayingScreen(),
+        builder: (context) => NowPlayingScreen(
+          initialSlideshowPhotos: slideshowPhotos,
+          slideshowTitle: slideshowTitle,
+        ),
       ),
+    );
+  }
+
+  Widget _buildSlideshowLaunchTile({
+    required String title,
+    required List<String> photos,
+    required List<SongItem> songs,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.only(left: 36, right: 16),
+      leading: const Icon(Icons.photo_library, color: Colors.cyanAccent, size: 30),
+      title: Text(
+        'Diashow: $title',
+        style: const TextStyle(
+          color: Colors.cyanAccent,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        '${photos.length} foto(s)${songs.isNotEmpty ? ' · ${songs.length} mp3 beschikbaar' : ' · zonder mp3'}',
+        style: const TextStyle(color: Colors.grey, fontSize: 11),
+      ),
+      trailing: const Icon(Icons.slideshow, color: Colors.cyanAccent, size: 22),
+      onTap: () {
+        if (songs.isNotEmpty) {
+          final allSongs = _getAllSongs();
+          final firstIndex = allSongs.indexWhere((s) => s.path == songs.first.path);
+          if (firstIndex != -1) {
+            audioHandler.setPlaylist(allSongs, firstIndex);
+          }
+        }
+        _openNowPlayingScreen(
+          slideshowPhotos: photos,
+          slideshowTitle: title,
+        );
+      },
     );
   }
 
@@ -768,11 +914,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                     final folderName = groupKeys[index];
                     final group = _folderGroups[folderName]!;
                     final totalSongsInGroup = group.allSongsInGroup.length;
+                    final totalPhotosInGroup = group.allGroupPhotos.length;
                     final groupShuffleKey = 'main:$folderName';
                     final isGroupShuffled = _activeShuffledKey == groupShuffleKey;
 
                     return ExpansionTile(
-                      leading: const Icon(Icons.folder, color: Colors.amber),
+                      leading: Icon(
+                        group.isPhotoFolder ? Icons.photo_library : Icons.folder,
+                        color: group.isPhotoFolder ? Colors.cyanAccent : Colors.amber,
+                      ),
                       title: Row(
                         children: [
                           Expanded(
@@ -781,32 +931,58 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                               style: const TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.shuffle,
-                              size: 20,
-                              color: isGroupShuffled ? Colors.green : Colors.grey,
+                          if (totalPhotosInGroup > 0)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.slideshow,
+                                size: 20,
+                                color: Colors.cyanAccent,
+                              ),
+                              tooltip: 'Start _foto diashow',
+                              onPressed: () {
+                                if (group.allSongsInGroup.isNotEmpty) {
+                                  final firstIdx = allSongs.indexWhere(
+                                    (s) => s.path == group.allSongsInGroup.first.path,
+                                  );
+                                  if (firstIdx != -1) {
+                                    audioHandler.setPlaylist(allSongs, firstIdx);
+                                  }
+                                }
+                                _openNowPlayingScreen(
+                                  slideshowPhotos: group.allGroupPhotos,
+                                  slideshowTitle: folderName,
+                                );
+                              },
                             ),
-                            tooltip: isGroupShuffled ? 'Zet map shuffle uit' : 'Shuffle deze map',
-                            onPressed: () async {
-                              if (isGroupShuffled) {
-                                setState(() {
-                                  _activeShuffledKey = null;
-                                });
-                                await audioHandler.restoreOriginalOrder(group.allSongsInGroup);
-                              } else {
-                                await audioHandler.playFolderShuffled(group.allSongsInGroup);
-                                setState(() {
-                                  _activeShuffledKey = groupShuffleKey;
-                                  _isShuffled = false;
-                                });
-                              }
-                            },
-                          ),
+                          if (group.allSongsInGroup.isNotEmpty)
+                            IconButton(
+                              icon: Icon(
+                                Icons.shuffle,
+                                size: 20,
+                                color: isGroupShuffled ? Colors.green : Colors.grey,
+                              ),
+                              tooltip: isGroupShuffled ? 'Zet map shuffle uit' : 'Shuffle deze map',
+                              onPressed: () async {
+                                if (isGroupShuffled) {
+                                  setState(() {
+                                    _activeShuffledKey = null;
+                                  });
+                                  await audioHandler.restoreOriginalOrder(group.allSongsInGroup);
+                                } else {
+                                  await audioHandler.playFolderShuffled(group.allSongsInGroup);
+                                  setState(() {
+                                    _activeShuffledKey = groupShuffleKey;
+                                    _isShuffled = false;
+                                  });
+                                }
+                              },
+                            ),
                         ],
                       ),
                       subtitle: Text(
-                        '$totalSongsInGroup nummers${group.subfolders.isNotEmpty ? ' · ${group.subfolders.length} submap(pen)' : ''}',
+                        '$totalSongsInGroup nummers'
+                        '${totalPhotosInGroup > 0 ? ' · $totalPhotosInGroup foto(s)' : ''}'
+                        '${group.subfolders.isNotEmpty ? ' · ${group.subfolders.length} submap(pen)' : ''}',
                         style: const TextStyle(color: Colors.grey, fontSize: 12),
                       ),
                       children: [
@@ -815,13 +991,18 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                           final subData = subEntry.value;
                           final subSongs = subData.songs;
                           final subLinks = subData.links;
+                          final subPhotos = subData.photos;
                           final subShuffleKey = 'sub:$folderName/$subName';
                           final isSubShuffled = _activeShuffledKey == subShuffleKey;
 
                           return Padding(
                             padding: const EdgeInsets.only(left: 16.0),
                             child: ExpansionTile(
-                              leading: const Icon(Icons.folder_open, color: Colors.amberAccent, size: 22),
+                              leading: Icon(
+                                subData.isPhotoFolder ? Icons.photo_library : Icons.folder_open,
+                                color: subData.isPhotoFolder ? Colors.cyanAccent : Colors.amberAccent,
+                                size: 22,
+                              ),
                               title: Row(
                                 children: [
                                   Expanded(
@@ -830,6 +1011,29 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                       style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                                     ),
                                   ),
+                                  if (subPhotos.isNotEmpty)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.slideshow,
+                                        size: 18,
+                                        color: Colors.cyanAccent,
+                                      ),
+                                      tooltip: 'Start diashow voor $subName',
+                                      onPressed: () {
+                                        if (subSongs.isNotEmpty) {
+                                          final firstIdx = allSongs.indexWhere(
+                                            (s) => s.path == subSongs.first.path,
+                                          );
+                                          if (firstIdx != -1) {
+                                            audioHandler.setPlaylist(allSongs, firstIdx);
+                                          }
+                                        }
+                                        _openNowPlayingScreen(
+                                          slideshowPhotos: subPhotos,
+                                          slideshowTitle: '$folderName / $subName',
+                                        );
+                                      },
+                                    ),
                                   if (subSongs.isNotEmpty)
                                     IconButton(
                                       icon: Icon(
@@ -856,16 +1060,30 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                                 ],
                               ),
                               subtitle: Text(
-                                '${subSongs.length} nummers${subLinks.isNotEmpty ? ' · ${subLinks.length} link(s)' : ''}',
+                                '${subSongs.length} nummers'
+                                '${subPhotos.isNotEmpty ? ' · ${subPhotos.length} foto(s)' : ''}'
+                                '${subLinks.isNotEmpty ? ' · ${subLinks.length} link(s)' : ''}',
                                 style: const TextStyle(color: Colors.grey, fontSize: 11),
                               ),
                               children: [
+                                if (subPhotos.isNotEmpty)
+                                  _buildSlideshowLaunchTile(
+                                    title: '$folderName / $subName',
+                                    photos: subPhotos,
+                                    songs: subSongs,
+                                  ),
                                 ...subLinks.map((link) => _buildLinkTile(link)),
                                 ...subSongs.map((song) => _buildSongTile(song, allSongs)),
                               ],
                             ),
                           );
                         }),
+                        if (group.directPhotos.isNotEmpty)
+                          _buildSlideshowLaunchTile(
+                            title: folderName,
+                            photos: group.directPhotos,
+                            songs: group.directSongs,
+                          ),
                         ...group.directLinks.map((link) => _buildLinkTile(link)),
                         ...group.directSongs.map((song) => _buildSongTile(song, allSongs)),
                       ],
@@ -874,7 +1092,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 ),
       bottomNavigationBar: _currentIndex != null
           ? GestureDetector(
-              onTap: _openNowPlayingScreen,
+              onTap: () => _openNowPlayingScreen(),
               child: Container(
                 color: Colors.grey[900],
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -1021,7 +1239,14 @@ class SpectrumVisualizer extends StatelessWidget {
 }
 
 class NowPlayingScreen extends StatefulWidget {
-  const NowPlayingScreen({super.key});
+  final List<String> initialSlideshowPhotos;
+  final String? slideshowTitle;
+
+  const NowPlayingScreen({
+    super.key,
+    this.initialSlideshowPhotos = const [],
+    this.slideshowTitle,
+  });
 
   @override
   State<NowPlayingScreen> createState() => _NowPlayingScreenState();
@@ -1041,12 +1266,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   VideoPlayerController? _videoController;
   bool _isVideoInitialized = false;
 
+  // Diashow state voor _foto mappen
+  List<String> _slideshowPhotos = [];
+  int _photoIndex = 0;
+  bool _slideshowRunning = true;
+  Timer? _slideshowTimer;
+
   @override
   void initState() {
     super.initState();
     _isPlaying = audioHandler._player.playing;
     _currentMediaItem = audioHandler.mediaItem.value;
+    _slideshowPhotos = List.from(widget.initialSlideshowPhotos);
     _loadSongDetails();
+    _startSlideshowTimerIfNeeded();
 
     audioHandler.playbackState.listen((state) {
       if (mounted) {
@@ -1075,8 +1308,38 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   @override
   void dispose() {
+    _slideshowTimer?.cancel();
     _videoController?.dispose();
     super.dispose();
+  }
+
+  void _startSlideshowTimerIfNeeded() {
+    _slideshowTimer?.cancel();
+    if (_slideshowPhotos.length > 1 && _slideshowRunning) {
+      _slideshowTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+        if (!mounted || !_slideshowRunning || _slideshowPhotos.isEmpty) return;
+        setState(() {
+          _photoIndex = (_photoIndex + 1) % _slideshowPhotos.length;
+        });
+      });
+    }
+  }
+
+  void _toggleSlideshowRunning() {
+    setState(() {
+      _slideshowRunning = !_slideshowRunning;
+    });
+    _startSlideshowTimerIfNeeded();
+  }
+
+  void _stepPhoto(int delta) {
+    if (_slideshowPhotos.isEmpty) return;
+    setState(() {
+      _photoIndex = (_photoIndex + delta) % _slideshowPhotos.length;
+      if (_photoIndex < 0) {
+        _photoIndex += _slideshowPhotos.length;
+      }
+    });
   }
 
   void _syncVideoToPosition(Duration position) {
@@ -1110,6 +1373,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       (s) => s.path == currentPath,
       orElse: () => SongItem(path: '', title: '', artist: '', folderName: ''),
     );
+
+    if (currentSong.slideshowPhotos.isNotEmpty) {
+      final listChanged = _slideshowPhotos.length != currentSong.slideshowPhotos.length ||
+          _slideshowPhotos.first != currentSong.slideshowPhotos.first;
+      if (listChanged) {
+        _slideshowPhotos = List.from(currentSong.slideshowPhotos);
+        _photoIndex = 0;
+        _startSlideshowTimerIfNeeded();
+      }
+    } else if (widget.initialSlideshowPhotos.isEmpty) {
+      _slideshowPhotos = [];
+      _photoIndex = 0;
+      _slideshowTimer?.cancel();
+    }
 
     if (_enableVideoPlayback && currentSong.videoPath != null) {
       final videoFile = File(currentSong.videoPath!);
@@ -1335,8 +1612,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     String? currentImagePath,
     double borderRadius = 14,
   }) {
+    final hasSlideshow = _slideshowPhotos.isNotEmpty;
+    final safePhotoIndex = hasSlideshow ? (_photoIndex % _slideshowPhotos.length) : 0;
+    final activePhotoPath = hasSlideshow ? _slideshowPhotos[safePhotoIndex] : null;
+
     Widget mediaChild;
-    if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
+    if (hasSlideshow && activePhotoPath != null && File(activePhotoPath).existsSync()) {
+      mediaChild = Image.file(
+        File(activePhotoPath),
+        key: ValueKey(activePhotoPath),
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+      );
+    } else if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
       mediaChild = SizedBox(
         width: width,
         height: height,
@@ -1374,6 +1663,22 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           fit: StackFit.expand,
           children: [
             mediaChild,
+            if (hasSlideshow)
+              Positioned(
+                top: 8,
+                left: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Foto ${safePhotoIndex + 1}/${_slideshowPhotos.length}',
+                    style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
             _buildSubtitleOverlay(
               hasAnySubtitle: hasAnySubtitle,
               fontSize: subtitleFontSize,
@@ -1382,6 +1687,37 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildSlideshowControls() {
+    if (_slideshowPhotos.isEmpty) return const SizedBox.shrink();
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        IconButton(
+          icon: const Icon(Icons.chevron_left, color: Colors.cyanAccent),
+          tooltip: 'Vorige foto',
+          onPressed: () => _stepPhoto(-1),
+        ),
+        TextButton.icon(
+          icon: Icon(
+            _slideshowRunning ? Icons.pause : Icons.play_arrow,
+            color: Colors.cyanAccent,
+            size: 18,
+          ),
+          label: Text(
+            _slideshowRunning ? 'Diashow pauzeren' : 'Diashow starten',
+            style: const TextStyle(color: Colors.cyanAccent, fontSize: 12),
+          ),
+          onPressed: _toggleSlideshowRunning,
+        ),
+        IconButton(
+          icon: const Icon(Icons.chevron_right, color: Colors.cyanAccent),
+          tooltip: 'Volgende foto',
+          onPressed: () => _stepPhoto(1),
+        ),
+      ],
     );
   }
 
@@ -1397,6 +1733,17 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
     final hasAnySubtitle = currentSong.vttPath != null || currentSong.vttNlPath != null;
     final hasBothSubtitles = currentSong.vttPath != null && currentSong.vttNlPath != null;
+    final hasSlideshow = _slideshowPhotos.isNotEmpty;
+
+    final mediaTitle = _currentMediaItem?.title;
+    final mediaArtist = _currentMediaItem?.artist;
+
+    final String displayTitle = (mediaTitle != null && mediaTitle.isNotEmpty)
+        ? mediaTitle
+        : (widget.slideshowTitle ?? (hasSlideshow ? 'Diashow (_foto)' : ''));
+    final String displayArtist = (mediaArtist != null && mediaArtist.isNotEmpty)
+        ? mediaArtist
+        : (hasSlideshow ? '${_slideshowPhotos.length} foto(s)' : 'Onbekende Artiest');
 
     if (_isFullscreen) {
       return Scaffold(
@@ -1417,6 +1764,20 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                       borderRadius: 0,
                     ),
                   ),
+                  if (hasSlideshow)
+                    Positioned(
+                      bottom: 16,
+                      left: 16,
+                      right: 16,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: _buildSlideshowControls(),
+                      ),
+                    ),
                   Positioned(
                     top: 12,
                     right: 12,
@@ -1498,7 +1859,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.fullscreen),
-            tooltip: 'Fullscreen poster / video',
+            tooltip: 'Fullscreen poster / video / diashow',
             onPressed: () {
               setState(() {
                 _isFullscreen = true;
@@ -1587,6 +1948,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                             ),
                           ],
                         ),
+                        if (hasSlideshow) _buildSlideshowControls(),
                         const SizedBox(height: 4),
                         SpectrumVisualizer(
                           isPlaying: _isPlaying,
@@ -1594,7 +1956,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _currentMediaItem?.title ?? '',
+                          displayTitle,
                           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                           textAlign: TextAlign.center,
                           maxLines: 1,
@@ -1602,7 +1964,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _currentMediaItem?.artist ?? 'Onbekende Artiest',
+                          displayArtist,
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                           textAlign: TextAlign.center,
                           maxLines: 1,
@@ -1627,6 +1989,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   );
                 },
               ),
+              if (hasSlideshow) ...[
+                const SizedBox(height: 6),
+                _buildSlideshowControls(),
+              ],
               const SizedBox(height: 12),
               SpectrumVisualizer(
                 isPlaying: _isPlaying,
@@ -1634,7 +2000,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                _currentMediaItem?.title ?? '',
+                displayTitle,
                 style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
                 maxLines: 1,
@@ -1642,7 +2008,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _currentMediaItem?.artist ?? 'Onbekende Artiest',
+                displayArtist,
                 style: const TextStyle(fontSize: 14, color: Colors.grey),
                 textAlign: TextAlign.center,
               ),
