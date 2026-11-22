@@ -123,35 +123,39 @@ class MyAudioHandler extends BaseAudioHandler with SeekHandler {
   Future<void> seek(Duration position) => _player.seek(position);
 
   Future<void> setPlaylist(List<SongItem> newPlaylist, int initialIndex, {bool keepOriginalOrder = false}) async {
-    playlist = newPlaylist;
-    if (!keepOriginalOrder) {
-      _unshuffledPlaylist = List.from(newPlaylist);
-    }
-    currentIndex = initialIndex;
-
-    final List<AudioSource> sources = playlist.map((song) {
-      Uri? artUri;
-      if (song.imagePath != null) {
-        final imageFile = File(song.imagePath!);
-        if (imageFile.existsSync()) {
-          artUri = Uri.parse('file://${imageFile.path}');
-        }
+    try {
+      playlist = newPlaylist;
+      if (!keepOriginalOrder) {
+        _unshuffledPlaylist = List.from(newPlaylist);
       }
+      currentIndex = initialIndex;
 
-      final mediaItemTag = MediaItem(
-        id: song.path,
-        album: song.folderName,
-        title: song.title,
-        artist: song.artist,
-        artUri: artUri,
-      );
+      final List<AudioSource> sources = playlist.map((song) {
+        Uri? artUri;
+        if (song.imagePath != null) {
+          final imageFile = File(song.imagePath!);
+          if (imageFile.existsSync()) {
+            artUri = Uri.parse('file://${imageFile.path}');
+          }
+        }
 
-      return AudioSource.file(song.path, tag: mediaItemTag);
-    }).toList();
+        final mediaItemTag = MediaItem(
+          id: song.path,
+          album: song.folderName,
+          title: song.title,
+          artist: song.artist,
+          artUri: artUri,
+        );
 
-    await _player.setAudioSource(ConcatenatingAudioSource(children: sources), initialIndex: currentIndex);
-    _updateMediaItemForCurrentIndex();
-    await _player.play();
+        return AudioSource.file(song.path, tag: mediaItemTag);
+      }).toList();
+
+      await _player.setAudioSource(ConcatenatingAudioSource(children: sources), initialIndex: currentIndex);
+      _updateMediaItemForCurrentIndex();
+      await _player.play();
+    } catch (e) {
+      debugPrint("Fout bij afspelen van playlist: $e");
+    }
   }
 
   Future<void> playFolderShuffled(List<SongItem> folderSongs) async {
@@ -464,30 +468,15 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
     return found;
   }
 
-  void _collectImagesRecursive(Directory dir, List<String> targetPhotos) {
-    try {
-      for (var entity in dir.listSync()) {
-        final name = entity.path.split('/').last;
-        if (name.startsWith('.')) continue;
-
-        if (entity is File && _isSupportedImagePath(entity.path)) {
-          targetPhotos.add(entity.path);
-        } else if (entity is Directory) {
-          _collectImagesRecursive(entity, targetPhotos);
-        }
-      }
-    } catch (e) {
-      debugPrint("Fout bij scannen foto's in ${dir.path}: $e");
-    }
-  }
-
   void _collectFolderContentsRecursive(
     Directory dir,
     String labelName,
     List<SongItem> targetSongs,
     List<YouTubeLinkItem> targetLinks,
     List<String> targetPhotos,
-  ) {
+    Set<String> seenPhotoPaths, {
+    required bool insidePhotoTree,
+  }) {
     try {
       final subEntities = dir.listSync();
       for (var subEntity in subEntities) {
@@ -499,7 +488,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           final parentPath = subEntity.parent.path;
 
           final (artist, title) = _parseSongName(baseName);
-
           final String? imgPath = _findCoverImagePath(parentPath, baseName);
 
           final potentialVideo = File('$parentPath/$baseName.mp4');
@@ -524,19 +512,19 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
         } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
           targetLinks.addAll(_parseLinksFromTxtFile(subEntity, labelName));
         } else if (subEntity is File && _isSupportedImagePath(subEntity.path)) {
-          if (_isPhotoFolderName(dir.path.split('/').last)) {
+          if (insidePhotoTree && seenPhotoPaths.add(subEntity.path)) {
             targetPhotos.add(subEntity.path);
           }
         } else if (subEntity is Directory) {
-          if (_isPhotoFolderName(name)) {
-            _collectImagesRecursive(subEntity, targetPhotos);
-          }
+          final nextPhotoTree = insidePhotoTree || _isPhotoFolderName(name);
           _collectFolderContentsRecursive(
             subEntity,
             '$labelName / $name',
             targetSongs,
             targetLinks,
             targetPhotos,
+            seenPhotoPaths,
+            insidePhotoTree: nextPhotoTree,
           );
         }
       }
@@ -561,10 +549,7 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
           List<YouTubeLinkItem> directLinks = [];
           List<String> directPhotos = [];
           Map<String, _SubfolderData> subfolders = {};
-
-          if (isPhotoMainFolder) {
-            _collectImagesRecursive(entity, directPhotos);
-          }
+          final Set<String> seenPhotoPaths = <String>{};
 
           try {
             final subEntities = entity.listSync();
@@ -576,7 +561,6 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                 final baseName = name.replaceAll(RegExp(r'\.mp3$', caseSensitive: false), '');
                 final parentPath = subEntity.parent.path;
                 final (artist, title) = _parseSongName(baseName);
-
                 final String? imgPath = _findCoverImagePath(parentPath, baseName);
 
                 final potentialVideo = File('$parentPath/$baseName.mp4');
@@ -601,23 +585,22 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
               } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
                 directLinks.addAll(_parseLinksFromTxtFile(subEntity, folderName));
               } else if (subEntity is File && _isSupportedImagePath(subEntity.path)) {
-                if (isPhotoMainFolder) {
+                if (isPhotoMainFolder && seenPhotoPaths.add(subEntity.path)) {
                   directPhotos.add(subEntity.path);
                 }
               } else if (subEntity is Directory) {
-                final isPhotoSub = _isPhotoFolderName(name);
+                final isPhotoSub = isPhotoMainFolder || _isPhotoFolderName(name);
                 List<SongItem> subSongs = [];
                 List<YouTubeLinkItem> subLinks = [];
                 List<String> subPhotos = [];
-                if (isPhotoSub) {
-                  _collectImagesRecursive(subEntity, subPhotos);
-                }
                 _collectFolderContentsRecursive(
                   subEntity,
                   '$folderName / $name',
                   subSongs,
                   subLinks,
                   subPhotos,
+                  seenPhotoPaths,
+                  insidePhotoTree: isPhotoSub,
                 );
                 _sortSongs(subSongs);
                 subPhotos.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
@@ -1640,12 +1623,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
     Widget mediaChild;
     if (hasSlideshow && activePhotoPath != null && File(activePhotoPath).existsSync()) {
-      mediaChild = Image.file(
-        File(activePhotoPath),
-        key: ValueKey(activePhotoPath),
-        width: width,
-        height: height,
-        fit: BoxFit.cover,
+      mediaChild = Container(
+        color: Colors.black,
+        child: Image.file(
+          File(activePhotoPath),
+          key: ValueKey(activePhotoPath),
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+        ),
       );
     } else if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
       mediaChild = SizedBox(
@@ -1661,11 +1647,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         ),
       );
     } else if (currentImagePath != null && File(currentImagePath).existsSync()) {
-      mediaChild = Image.file(
-        File(currentImagePath),
-        width: width,
-        height: height,
-        fit: BoxFit.cover,
+      mediaChild = Container(
+        color: Colors.black,
+        child: Image.file(
+          File(currentImagePath),
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+        ),
       );
     } else {
       mediaChild = Container(
