@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:path_provider/path_provider.dart';
@@ -1264,6 +1265,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   List<SubtitleItem> _subtitlesNl = [];
   bool _showNlSubtitles = false;
   bool _isFullscreen = false;
+  bool _fitCoverImages = false;
 
   // Schakelaar voor video aan/uit (Aan = MiraScreen / lokaal, Uit = AirPin Lite poster modus)
   bool _enableVideoPlayback = true;
@@ -1313,9 +1315,21 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   @override
   void dispose() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     _slideshowTimer?.cancel();
     _videoController?.dispose();
     super.dispose();
+  }
+
+  void _setFullscreen(bool fullscreen) {
+    setState(() {
+      _isFullscreen = fullscreen;
+    });
+    if (fullscreen) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
   }
 
   void _startSlideshowTimerIfNeeded() {
@@ -1620,6 +1634,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     final hasSlideshow = _slideshowPhotos.isNotEmpty;
     final safePhotoIndex = hasSlideshow ? (_photoIndex % _slideshowPhotos.length) : 0;
     final activePhotoPath = hasSlideshow ? _slideshowPhotos[safePhotoIndex] : null;
+    final BoxFit imageFit = _fitCoverImages ? BoxFit.cover : BoxFit.contain;
 
     Widget mediaChild;
     if (hasSlideshow && activePhotoPath != null && File(activePhotoPath).existsSync()) {
@@ -1630,7 +1645,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           key: ValueKey(activePhotoPath),
           width: width,
           height: height,
-          fit: BoxFit.contain,
+          fit: imageFit,
         ),
       );
     } else if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
@@ -1653,7 +1668,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           File(currentImagePath),
           width: width,
           height: height,
-          fit: BoxFit.contain,
+          fit: imageFit,
         ),
       );
     } else {
@@ -1698,6 +1713,26 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFitToggleButton({bool compact = false}) {
+    return TextButton.icon(
+      style: TextButton.styleFrom(
+        backgroundColor: _fitCoverImages ? Colors.cyan.withValues(alpha: 0.25) : Colors.black54,
+        foregroundColor: Colors.cyanAccent,
+        padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10, vertical: compact ? 4 : 6),
+      ),
+      icon: Icon(_fitCoverImages ? Icons.crop : Icons.fit_screen, size: compact ? 14 : 16),
+      label: Text(
+        _fitCoverImages ? 'Vullend' : 'Passend',
+        style: TextStyle(fontSize: compact ? 11 : 12, fontWeight: FontWeight.bold),
+      ),
+      onPressed: () {
+        setState(() {
+          _fitCoverImages = !_fitCoverImages;
+        });
+      },
     );
   }
 
@@ -1757,86 +1792,81 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         : (hasSlideshow ? '${_slideshowPhotos.length} foto(s)' : 'Onbekende Artiest');
 
     if (_isFullscreen) {
+      final screenSize = MediaQuery.of(context).size;
       return Scaffold(
         backgroundColor: Colors.black,
-        body: SafeArea(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              return Stack(
-                fit: StackFit.expand,
-                children: [
-                  Center(
-                    child: _buildMediaBox(
-                      width: constraints.maxWidth,
-                      height: constraints.maxHeight,
-                      subtitleFontSize: 18,
-                      hasAnySubtitle: hasAnySubtitle,
-                      currentImagePath: currentImagePath,
-                      borderRadius: 0,
+        body: SizedBox.expand(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Center(
+                child: _buildMediaBox(
+                  width: screenSize.width,
+                  height: screenSize.height,
+                  subtitleFontSize: 18,
+                  hasAnySubtitle: hasAnySubtitle,
+                  currentImagePath: currentImagePath,
+                  borderRadius: 0,
+                ),
+              ),
+              if (hasSlideshow)
+                Positioned(
+                  bottom: 16,
+                  left: 16,
+                  right: 16,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(24),
                     ),
+                    child: _buildSlideshowControls(),
                   ),
-                  if (hasSlideshow)
-                    Positioned(
-                      bottom: 16,
-                      left: 16,
-                      right: 16,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              Positioned(
+                top: 16,
+                right: 16,
+                child: Row(
+                  children: [
+                    _buildFitToggleButton(),
+                    const SizedBox(width: 8),
+                    if (hasBothSubtitles)
+                      Container(
+                        margin: const EdgeInsets.only(right: 8),
                         decoration: BoxDecoration(
                           color: Colors.black54,
-                          borderRadius: BorderRadius.circular(24),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: _buildSlideshowControls(),
+                        child: TextButton.icon(
+                          style: TextButton.styleFrom(
+                            backgroundColor: _showNlSubtitles ? Colors.green : Colors.black54,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          ),
+                          icon: const Icon(Icons.translate, size: 15),
+                          label: Text(
+                            _showNlSubtitles ? 'NL' : 'Orig',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _showNlSubtitles = !_showNlSubtitles;
+                            });
+                          },
+                        ),
+                      ),
+                    CircleAvatar(
+                      backgroundColor: Colors.black54,
+                      child: IconButton(
+                        icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
+                        tooltip: 'Sluit fullscreen',
+                        onPressed: () => _setFullscreen(false),
                       ),
                     ),
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Row(
-                      children: [
-                        if (hasBothSubtitles)
-                          Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: Colors.black54,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: TextButton.icon(
-                              style: TextButton.styleFrom(
-                                backgroundColor: _showNlSubtitles ? Colors.green : Colors.black54,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              ),
-                              icon: const Icon(Icons.translate, size: 15),
-                              label: Text(
-                                _showNlSubtitles ? 'NL' : 'Orig',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _showNlSubtitles = !_showNlSubtitles;
-                                });
-                              },
-                            ),
-                          ),
-                        CircleAvatar(
-                          backgroundColor: Colors.black54,
-                          child: IconButton(
-                            icon: const Icon(Icons.fullscreen_exit, color: Colors.white),
-                            tooltip: 'Sluit fullscreen',
-                            onPressed: () {
-                              setState(() {
-                                _isFullscreen = false;
-                              });
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -1855,6 +1885,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         title: const Text('Now Playing', style: TextStyle(fontSize: 16)),
         centerTitle: true,
         actions: [
+          _buildFitToggleButton(compact: true),
           IconButton(
             icon: Icon(
               _enableVideoPlayback ? Icons.videocam : Icons.videocam_off,
@@ -1871,11 +1902,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           IconButton(
             icon: const Icon(Icons.fullscreen),
             tooltip: 'Fullscreen poster / video / diashow',
-            onPressed: () {
-              setState(() {
-                _isFullscreen = true;
-              });
-            },
+            onPressed: () => _setFullscreen(true),
           ),
           if (hasBothSubtitles)
             Padding(
@@ -2065,3 +2092,4 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
