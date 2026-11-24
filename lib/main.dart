@@ -1782,6 +1782,15 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     String? currentImagePath,
     double borderRadius = 14,
   }) {
+    final mediaQuery = MediaQuery.of(context);
+    final dpr = mediaQuery.devicePixelRatio.clamp(1.0, 3.0);
+
+    final double effectiveHeight = _isFullscreen
+        ? height
+        : min(height, mediaQuery.size.height * 0.62);
+
+    final int cacheH = max(1, (effectiveHeight * dpr).round());
+
     final hasSlideshow = _slideshowPhotos.isNotEmpty;
     final safePhotoIndex = hasSlideshow ? (_photoIndex % _slideshowPhotos.length) : 0;
     final activePhotoPath = hasSlideshow ? _slideshowPhotos[safePhotoIndex] : null;
@@ -1797,7 +1806,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
           File(activePhotoPath),
           key: ValueKey(activePhotoPath),
           width: width,
-          height: height,
+          height: effectiveHeight,
+          cacheHeight: cacheH,
           fit: imageFit,
           alignment: imageAlignment,
         ),
@@ -1805,7 +1815,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     } else if (_enableVideoPlayback && _videoController != null && _isVideoInitialized) {
       mediaChild = SizedBox(
         width: width,
-        height: height,
+        height: effectiveHeight,
         child: FittedBox(
           fit: BoxFit.cover,
           child: SizedBox(
@@ -1821,7 +1831,8 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         child: Image.file(
           File(currentImagePath),
           width: width,
-          height: height,
+          height: effectiveHeight,
+          cacheHeight: cacheH,
           fit: imageFit,
           alignment: imageAlignment,
         ),
@@ -1829,7 +1840,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     } else {
       mediaChild = Container(
         width: width,
-        height: height,
+        height: effectiveHeight,
         color: Colors.grey[800],
         child: const Icon(Icons.music_note, size: 70, color: Colors.white),
       );
@@ -1839,7 +1850,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       borderRadius: BorderRadius.circular(borderRadius),
       child: SizedBox(
         width: width,
-        height: height,
+        height: effectiveHeight,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -2309,5 +2320,6 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 }
+
 
 
