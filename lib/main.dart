@@ -512,7 +512,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
             folderName: labelName,
           ));
         } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
-          targetLinks.addAll(_parseLinksFromTxtFile(subEntity, labelName));
+          if (!insidePhotoTree) {
+            targetLinks.addAll(_parseLinksFromTxtFile(subEntity, labelName));
+          }
         } else if (subEntity is File && _isSupportedImagePath(subEntity.path)) {
           if (insidePhotoTree && seenPhotoPaths.add(subEntity.path)) {
             targetPhotos.add(subEntity.path);
@@ -585,7 +587,9 @@ class _MusicPlayerPageState extends State<MusicPlayerPage> {
                   folderName: folderName,
                 ));
               } else if (subEntity is File && subEntity.path.toLowerCase().endsWith('.txt')) {
-                directLinks.addAll(_parseLinksFromTxtFile(subEntity, folderName));
+                if (!isPhotoMainFolder) {
+                  directLinks.addAll(_parseLinksFromTxtFile(subEntity, folderName));
+                }
               } else if (subEntity is File && _isSupportedImagePath(subEntity.path)) {
                 if (isPhotoMainFolder && seenPhotoPaths.add(subEntity.path)) {
                   directPhotos.add(subEntity.path);
@@ -1268,6 +1272,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
   bool _isFullscreen = false;
   bool _fitCoverImages = false;
   double _photoVerticalOffset = 0.0; // -1.0 = bovenkant, 0.0 = midden, +1.0 = onderkant
+  String _activePhotoCaption = '';
 
   // Schakelaar voor video aan/uit (Aan = MiraScreen / lokaal, Uit = AirPin Lite poster modus)
   bool _enableVideoPlayback = true;
@@ -1287,6 +1292,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     _isPlaying = audioHandler._player.playing;
     _currentMediaItem = audioHandler.mediaItem.value;
     _slideshowPhotos = List.from(widget.initialSlideshowPhotos);
+    _loadCaptionForActivePhoto();
     _loadSongDetails();
     _startSlideshowTimerIfNeeded();
 
@@ -1348,6 +1354,95 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     });
   }
 
+  String _captionFilePathForPhoto(String photoPath) {
+    final dotIndex = photoPath.lastIndexOf('.');
+    if (dotIndex == -1) return '$photoPath.txt';
+    return '${photoPath.substring(0, dotIndex)}.txt';
+  }
+
+  void _loadCaptionForActivePhoto() {
+    if (_slideshowPhotos.isEmpty) {
+      if (_activePhotoCaption.isNotEmpty) {
+        setState(() {
+          _activePhotoCaption = '';
+        });
+      }
+      return;
+    }
+
+    final safeIndex = _photoIndex % _slideshowPhotos.length;
+    final photoPath = _slideshowPhotos[safeIndex];
+    final txtFile = File(_captionFilePathForPhoto(photoPath));
+
+    String loadedText = '';
+    if (txtFile.existsSync()) {
+      try {
+        loadedText = txtFile.readAsStringSync().trim();
+      } catch (e) {
+        debugPrint("Fout bij lezen fototekst ${txtFile.path}: $e");
+      }
+    }
+
+    if (loadedText != _activePhotoCaption) {
+      setState(() {
+        _activePhotoCaption = loadedText;
+      });
+    }
+  }
+
+  Future<void> _editCaptionForActivePhoto() async {
+    if (_slideshowPhotos.isEmpty) return;
+    final safeIndex = _photoIndex % _slideshowPhotos.length;
+    final photoPath = _slideshowPhotos[safeIndex];
+    final txtFile = File(_captionFilePathForPhoto(photoPath));
+    final controller = TextEditingController(text: _activePhotoCaption);
+
+    final savedText = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Tekst bij foto'),
+          content: TextField(
+            controller: controller,
+            maxLines: 3,
+            autofocus: true,
+            decoration: const InputDecoration(
+              hintText: 'Typ hier de tekst voor onderaan de foto...',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Annuleren'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+              child: const Text('Opslaan'),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+    if (savedText == null || !mounted) return;
+
+    try {
+      if (savedText.isEmpty) {
+        if (txtFile.existsSync()) {
+          txtFile.deleteSync();
+        }
+      } else {
+        txtFile.writeAsStringSync(savedText);
+      }
+      setState(() {
+        _activePhotoCaption = savedText;
+      });
+    } catch (e) {
+      debugPrint("Fout bij opslaan fototekst ${txtFile.path}: $e");
+    }
+  }
+
   void _startSlideshowTimerIfNeeded() {
     _slideshowTimer?.cancel();
     if (_slideshowPhotos.length > 1 && _slideshowRunning) {
@@ -1356,6 +1451,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         setState(() {
           _photoIndex = (_photoIndex + 1) % _slideshowPhotos.length;
         });
+        _loadCaptionForActivePhoto();
       });
     }
   }
@@ -1375,6 +1471,7 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
         _photoIndex += _slideshowPhotos.length;
       }
     });
+    _loadCaptionForActivePhoto();
   }
 
   void _syncVideoToPosition(Duration position) {
@@ -1415,11 +1512,13 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
       if (listChanged) {
         _slideshowPhotos = List.from(currentSong.slideshowPhotos);
         _photoIndex = 0;
+        _loadCaptionForActivePhoto();
         _startSlideshowTimerIfNeeded();
       }
     } else if (widget.initialSlideshowPhotos.isEmpty) {
       _slideshowPhotos = [];
       _photoIndex = 0;
+      _activePhotoCaption = '';
       _slideshowTimer?.cancel();
     }
 
@@ -1589,6 +1688,42 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
     );
   }
 
+  Widget _buildPhotoCaptionOverlay({
+    required bool hasSlideshow,
+    required double fontSize,
+    double borderRadius = 14,
+  }) {
+    if (!hasSlideshow || _activePhotoCaption.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: _isFullscreen ? 58 : 0,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.75),
+          borderRadius: _isFullscreen
+              ? BorderRadius.zero
+              : BorderRadius.vertical(bottom: Radius.circular(borderRadius)),
+        ),
+        child: Text(
+          _activePhotoCaption,
+          style: TextStyle(
+            fontSize: fontSize,
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   Widget _buildPositionSlider({
     required double horizontalPadding,
     required double labelFontSize,
@@ -1725,6 +1860,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                   ),
                 ),
               ),
+            _buildPhotoCaptionOverlay(
+              hasSlideshow: hasSlideshow,
+              fontSize: subtitleFontSize,
+              borderRadius: borderRadius,
+            ),
             _buildSubtitleOverlay(
               hasAnySubtitle: hasAnySubtitle,
               fontSize: subtitleFontSize,
@@ -1792,8 +1932,10 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
 
   Widget _buildSlideshowControls() {
     if (_slideshowPhotos.isEmpty) return const SizedBox.shrink();
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 4,
       children: [
         IconButton(
           icon: const Icon(Icons.chevron_left, color: Colors.cyanAccent),
@@ -1811,6 +1953,14 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
             style: const TextStyle(color: Colors.cyanAccent, fontSize: 12),
           ),
           onPressed: _toggleSlideshowRunning,
+        ),
+        TextButton.icon(
+          icon: const Icon(Icons.edit_note, color: Colors.cyanAccent, size: 18),
+          label: const Text(
+            'Tekst',
+            style: TextStyle(color: Colors.cyanAccent, fontSize: 12),
+          ),
+          onPressed: _editCaptionForActivePhoto,
         ),
         IconButton(
           icon: const Icon(Icons.chevron_right, color: Colors.cyanAccent),
@@ -1878,11 +2028,11 @@ class _NowPlayingScreenState extends State<NowPlayingScreen> {
                 ),
               if (hasSlideshow)
                 Positioned(
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
+                  bottom: 12,
+                  left: 12,
+                  right: 12,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.black54,
                       borderRadius: BorderRadius.circular(24),
